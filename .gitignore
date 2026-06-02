@@ -17,3 +17,6 @@ build/
 coverage/
 .vercel
 .env*
+
+# build artifacts
+*.tsbuildinfo
