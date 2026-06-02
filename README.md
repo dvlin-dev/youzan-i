@@ -1,40 +1,66 @@
 # 云链进销存（jxc）
 
-服装批发场景的 **进销存系统**：入库出库、库存预警、采购单、盘点对账——并走向 **AI-Native**。
+服装批发场景的 **AI-Native 进销存系统**：入库出库、库存预警、采购单、盘点对账。
 
 > 客户原话痛点："8 个人用 Excel 记库存、上月盘点差了三万多。"
-> 解法核心：把库存从"可被覆盖的数字"重构为**由不可变流水累加出的派生值**，用守恒不变量 + 双人复核从结构上消灭错账；让 AI 经类型化工具层成为系统的一等操作者，而它所需的安全地基恰好就是治错账的那一套。
+> 解法核心：把库存从"可被覆盖的数字"重构为**不可变流水累加出的派生值**（守恒不变量 + 双人复核从结构上消灭错账）；让 AI 经类型化工具层成为系统的一等操作者——而它所需的安全地基，恰好就是治错账的那一套。
 
-## 现在能看什么
+## 🚀 在线体验
+
+**https://youzan-i-bowlingqs-projects.vercel.app**
+
+登录页已**预填演示账号**，选角色点「登录」即可：
+
+| 角色 | 账号 | 能做什么 |
+| --- | --- | --- |
+| 仓管 | warehouse@demo.com / demo1234 | 只看库存（成本脱敏）+ 录出入库 |
+| 采购 | buyer@demo.com / demo1234 | 采购单 + 盘点对账 |
+| 老板 | admin@demo.com / demo1234 | 全局 + 盘点过账 |
+
+**建议体验路径**：老板登录 → 「盘点对账」看 AI 把"差三万"两层归因拆成可执行的几摞 → 点任意差异行看流水链 + 证据 + 采纳建议 → 右上「AI 助手」用一句话查库存 / 出入库（NL → 工具调用预览 → 确认）。
+
+## 技术栈
+
+Next.js 16（App Router / RSC / Server Actions）· React 19 · TypeScript · **Drizzle ORM + Neon Postgres** · Auth.js v5 · Tailwind v4 · **@openai/agents**（gpt-5.5，经 OpenAI 兼容网关）· Vitest 就绪。
+
+## 本地运行
 
 ```bash
-open jxc-prototype.html      # 单文件、零依赖、可离线打开的高保真原型
+pnpm i
+cp .env.example .env            # 填 OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL / DATABASE_URL / AUTH_SECRET
+pnpm db:push                    # 建表
+pnpm db:seed                    # 灌入 79 SKU + 9 埋雷盘点 + 演示账号
+pnpm dev                        # http://localhost:3000
 ```
 
-原型含：库存 SKU 矩阵、出入库 + 双人复核、采购单状态机、**盘点对账两层 AI 归因闭环**、AI 助手侧栏（自然语言 → 工具调用预览 → HITL）、⌘K 命令面板、三角色权限。
+## 一键部署 Vercel
+
+1. 连接本仓库到 Vercel（框架自动识别为 Next.js）。
+2. 加 Postgres：`vercel integration add neon`（或在 Storage 里建 Neon，自动注入 `DATABASE_URL`）。
+3. 配环境变量：`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`、`AUTH_SECRET`（变量样例见 `.env.example`）。
+4. 部署。构建命令 `drizzle-kit push --force && next build` 会自动建表；首次部署后 `pnpm db:seed` 灌数据。
+5. 无 `OPENAI_API_KEY` 时 AI 优雅降级（仅确定性检测器 + 模板话术），应用照常可用。
+
+## 核心理念
+
+- **库存 = 流水累加**（append-only ledger），守恒不变量 `I1/I2` 随时成立；纠错只能红冲、永久留痕。
+- **盘点对账**不是"找差异"，而是 **AI 两层归因**（确定性检测器 + LLM）把"差三万"拆成：真损失该认、串色该互换、重复该红冲、可索赔该追——账面 −¥3.1 万 → 真实物净损失约 ¥1.2 万。
+- **AI 不写裸 SQL、不直接落库**：只调经守恒 + 权限 + 审计的类型化工具（`@openai/agents` 的 `tool()`），写操作先预览、经人确认（HITL）+ 双人复核。
+- **权限在数据层生效**：接口 RBAC + 字段脱敏（成本价对仓管不出现），不是前端藏按钮。
+
+## 代码结构
+
+```text
+app/(app)/{dashboard,stock,move,purchase,stocktake}   角色化页面
+app/login · app/api/{auth,copilot}                    登录 · 鉴权 · AI 路由
+lib/db/{schema,client,queries,ledger,seed}            数据层（库存=流水派生）
+lib/tools 即 lib/actions.ts                           类型化工具层（Server Actions，RBAC+守恒+审计）
+lib/stocktake/{attribution,engine}                    盘点两层归因引擎
+lib/ai/copilot.ts                                     @openai/agents copilot
+components/*                                          UI（暖色账册主题，token 化）
+jxc-prototype.html                                    早期单文件原型（参考）
+```
 
 ## 知识库（docs/）
 
-| 入口 | 内容 |
-| --- | --- |
-| [CLAUDE.md](./CLAUDE.md) | 仓库级协作入口：项目概述、架构边界、硬约束、工作规则 |
-| [docs/design/](./docs/design/index.md) | 规范事实源：领域模型、盘点对账、AI-Native 架构、交互原则 |
-| [docs/plan/](./docs/plan/index.md) | 执行期计划（当前：生产化为 Next.js + Postgres + Vercel） |
-| [docs/reference/](./docs/reference/index.md) | 工程规范、评分卡、Prompt/Skill 模板、AI 交付方法论全文 |
-
-文档治理规则见 [docs/CLAUDE.md](./docs/CLAUDE.md)。`AGENTS.md` 为 `CLAUDE.md` 的软链接（agents.md 规范兼容）。
-
-## 核心理念（一句话）
-
-- **库存 = 流水累加**（不可变 append-only ledger），守恒不变量 `I1/I2` 随时成立；纠错只能红冲，永久留痕。
-- **盘点对账**不是"找差异"，而是 AI 两层归因把"差三万"**拆成可执行的几摞**：真损失该认、串色该互换、重复该红冲、可索赔该去追、在途是假差异。
-- **AI 不写裸 SQL、不直接落库**：只调经守恒 + 权限 + 审计的类型化工具，写操作先预览、经人确认（HITL）。
-
-## 路线图
-
-- ✅ 高保真原型（`jxc-prototype.html`）
-- ⏳ 生产化：**Next.js 15 全栈 + Postgres，一键部署 Vercel**——见 [生产化计划](./docs/plan/2026-06-02-production-nextjs-vercel.md)。
-
-## 协作规范
-
-参与开发前请先读 [CLAUDE.md](./CLAUDE.md) 的《硬约束》——任何"改变库存"的代码路径都需逐条自检。
+设计与方法论文档见 [docs/](./docs/design/index.md)：[领域模型](./docs/design/domain-model.md) · [盘点对账与 AI 归因](./docs/design/stocktake-reconciliation.md) · [AI-Native 架构](./docs/design/ai-native-architecture.md) · [生产化计划](./docs/plan/2026-06-02-production-nextjs-vercel.md)。协作规范见 [CLAUDE.md](./CLAUDE.md)。
