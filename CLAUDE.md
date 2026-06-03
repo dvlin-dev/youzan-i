@@ -17,9 +17,9 @@
 
 | 关注点 | 规范事实源 | 生产代码（规划） |
 | --- | --- | --- |
-| 领域模型 / 不变量 | `docs/design/domain-model.md` | `lib/db/schema.ts`、`lib/db/ledger.ts` |
-| 盘点对账 / AI 归因 | `docs/design/stocktake-reconciliation.md` | `lib/stocktake/*` |
-| AI-Native 架构 / 工具层 | `docs/design/ai-native-architecture.md` | `lib/tools/*`、`app/api/copilot/*` |
+| 领域模型 / 不变量 | `docs/design/domain-model.md` | `lib/db/schema.ts`、`lib/db/ledger.ts`、`lib/db/draft.ts`、`lib/stock-math.ts` |
+| 盘点对账 / AI 归因 | `docs/design/stocktake-reconciliation.md` | `lib/stocktake/*`（第 1 层）、`lib/ai/explain.ts`（第 2 层） |
+| AI-Native 架构 / 工具层 | `docs/design/ai-native-architecture.md` | `lib/actions.ts`、`lib/ai/*`、`app/api/copilot/*` |
 | 交互与体验 | `docs/design/ux-principles.md` | `app/*`、`components/*` |
 | 工程规范 | `docs/reference/engineering-standards.md` | — |
 | 评测 / 回归 | `docs/reference/evaluation-rubric.md` | `tests/*` |
@@ -28,12 +28,12 @@
 ## 硬约束（不可妥协）
 
 - **库存不可直接编辑**，只能追加流水；库存 = `SUM(ledger.delta)` 派生，没有 `UPDATE stock.qty` 入口。
-- **流水只增不改不删**；纠错用红冲（追加反向流水），原始错误永久留痕。
-- 守恒不变量随时成立：`I1 期初 + 入库 − 出库 = 期末`、`I2 库存 = 流水累加`。
+- **流水只增不改不删**（`stock_ledger` 只有 INSERT）；纠错用红冲（追加反向流水），原始错误永久留痕。**待复核草稿存于独立 `move_draft` 表**（可改可删、驳回即删），与不可变流水物理隔离，复核通过才作为 posted 行追加进 ledger。
+- 守恒不变量随时成立：`I1 期初 + 入库 − 出库 = 期末`、`I2 库存 = 流水累加`。复核入账经**原子守恒护栏**（`postDraftAtomic`：单条语句内校验落账后库存不为负才追加），杜绝并发出库打穿库存。
 - **改变库存的动作需双人复核**：`reviewer_id ≠ creator_id`，后端强校验。
 - **金额一律整数分**存储与计算，仅展示层 `/100`。
-- **AI 不写裸 SQL、不直接落库**：只能调经守恒 + 权限 + 审计校验的类型化工具；写操作先出结构化预览、经 HITL 确认才提交。
-- **权限在数据层生效**：接口级 RBAC + 字段脱敏（成本价对仓管不出现该字段），不是前端藏按钮。
+- **AI 不写裸 SQL、不直接落库**：只能调经守恒 + 权限 + 审计校验的类型化工具；写操作先出结构化预览、经 HITL 确认才提交。盘点第 2 层 LLM 归因（`lib/ai/explain.ts`）只读、只在第 1 层证据上排序解释，不改分桶/金额。
+- **权限在数据层生效**：接口级 RBAC + 字段脱敏（成本价对仓管不在响应体出现，`fetchLedger` 按角色 `maskCost`），不是前端藏按钮。
 - **实盘不进状态**：实盘是盘点的一次性校准输入，其长期痕迹是它生成的盘盈/盘亏流水。
 
 ## 文档路由

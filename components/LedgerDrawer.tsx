@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./icons";
 import { yuan } from "@/lib/money";
-import { fetchLedger } from "@/lib/actions";
+import { fetchLedger, explainDiff } from "@/lib/actions";
+import { sumDeltas, runningBalances } from "@/lib/stock-math";
 import type { Attribution } from "@/lib/stocktake/attribution";
 
 type Row = {
@@ -18,7 +19,7 @@ type Row = {
   scanned: boolean;
   pdAdjust: boolean;
 };
-type SkuMeta = { skuCode: string; styleName: string; color: string; size: string; costPrice: number; tagPrice: number; safetyStock: number };
+type SkuMeta = { skuCode: string; styleName: string; color: string; size: string; costPrice?: number | null; tagPrice: number; safetyStock: number };
 export type ReconInfo = { book: number; actual: number; diff: number; attr: Attribution; resolved: boolean };
 
 function Card({ k, v, color }: { k: string; v: string; color?: string }) {
@@ -44,6 +45,8 @@ export function LedgerDrawer({
   onAdopt?: (skuCode: string) => void;
 }) {
   const [data, setData] = useState<{ sku: SkuMeta | null; rows: Row[] } | null>(null);
+  const [explain, setExplain] = useState<string | null>(null);
+  const [explaining, setExplaining] = useState(false);
   useEffect(() => {
     fetchLedger(skuCode).then((d) => setData(d as { sku: SkuMeta | null; rows: Row[] }));
   }, [skuCode]);
@@ -51,9 +54,16 @@ export function LedgerDrawer({
   const fmt = (t: string | Date) => new Date(t).toLocaleString("zh-CN", { hour12: false }).replace(/\//g, "-");
   const sku = data?.sku;
   const posted = (data?.rows ?? []).filter((r) => r.status === "posted");
-  const cur = posted.reduce((a, r) => a + r.delta, 0);
-  let run = 0;
-  const items = posted.map((r) => ({ r, run: (run += r.delta) }));
+  const cur = sumDeltas(posted);
+  // 结存 = 流水逐笔累加（纯函数，无可变外部状态）
+  const items = runningBalances(posted);
+
+  async function runExplain() {
+    setExplaining(true);
+    const r = await explainDiff(skuCode);
+    setExplain(r.text);
+    setExplaining(false);
+  }
 
   return (
     <>
@@ -67,7 +77,7 @@ export function LedgerDrawer({
               <span style={{ fontFamily: "var(--mono)" }}>{skuCode}</span>
             </div>
           </div>
-          <button className="icon-btn" onClick={onClose} style={{ marginLeft: "auto" }}>
+          <button className="icon-btn" onClick={onClose} style={{ marginLeft: "auto" }} aria-label="关闭">
             <Icon name="x" size={18} />
           </button>
         </div>
@@ -82,7 +92,7 @@ export function LedgerDrawer({
             <div className="row" style={{ gap: 10, marginBottom: 16 }}>
               <Card k="当前库存" v={String(cur)} />
               <Card k="安全库存" v={String(sku?.safetyStock ?? "—")} color={sku && cur < sku.safetyStock ? "var(--warn)" : undefined} />
-              {canCost && sku && <Card k="成本 / 吊牌" v={`${yuan(sku.costPrice)} / ${yuan(sku.tagPrice)}`} />}
+              {canCost && sku && sku.costPrice != null && <Card k="成本 / 吊牌" v={`${yuan(sku.costPrice)} / ${yuan(sku.tagPrice)}`} />}
             </div>
           )}
 
@@ -112,6 +122,28 @@ export function LedgerDrawer({
                 <b>建议：</b>
                 {recon.attr.sug}
               </p>
+
+              <div style={{ marginTop: 10, borderTop: "1px dashed var(--border)", paddingTop: 10 }}>
+                {explain == null ? (
+                  <button
+                    className="btn sm ghost"
+                    onClick={runExplain}
+                    disabled={explaining}
+                    style={{ width: "100%", justifyContent: "center" }}
+                    aria-label="让 AI 对成因排序并深入解释"
+                  >
+                    <Icon name="spark" size={13} /> {explaining ? "AI 分析中…" : "让 AI 深度归因（第 2 层 · 排序假设）"}
+                  </button>
+                ) : (
+                  <div className="ev" style={{ background: "var(--primary-weak)", borderColor: "var(--border)" }}>
+                    <div style={{ fontWeight: 600, color: "var(--primary)", marginBottom: 5, display: "flex", alignItems: "center", gap: 6 }}>
+                      <Icon name="spark" size={13} /> AI 第 2 层解释（基于上方检测器证据）
+                    </div>
+                    <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{explain}</p>
+                  </div>
+                )}
+              </div>
+
               {recon.resolved ? (
                 <div className="hitl" style={{ borderRadius: 8, marginTop: 10, borderTop: "none" }}>
                   <Icon name="check" size={13} /> 已采纳并生成调整流水
@@ -127,7 +159,7 @@ export function LedgerDrawer({
           <h2 className="sec" style={{ marginTop: 18 }}>不可变流水 · 库存 = 流水累加</h2>
           <div style={{ marginTop: 8 }}>
             {!data && <div className="dim">加载中…</div>}
-            {items.map(({ r, run }) => (
+            {items.map(({ row: r, balance: run }) => (
               <div className="ledger-item" key={r.id}>
                 <span
                   className="ld-dot"

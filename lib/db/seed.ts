@@ -4,6 +4,7 @@ import {
   appUser,
   sku,
   stockLedger,
+  moveDraft,
   purchaseOrder,
   poLine,
   stocktake,
@@ -52,6 +53,7 @@ export async function seed() {
   await db.delete(stocktake);
   await db.delete(poLine);
   await db.delete(purchaseOrder);
+  await db.delete(moveDraft);
   await db.delete(stockLedger);
   await db.delete(sku);
   await db.delete(appUser);

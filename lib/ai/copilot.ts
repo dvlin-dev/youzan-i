@@ -3,10 +3,9 @@ import { allSkus, stockMap, levelOf } from "@/lib/db/queries";
 import { loadStocktakeView, summarize } from "@/lib/stocktake/engine";
 import { yuan } from "@/lib/money";
 import { can, type Role } from "@/lib/constants";
+import { aiEnabled, getOpenAIClient } from "./client";
 
-export function aiEnabled() {
-  return !!process.env.OPENAI_API_KEY;
-}
+export { aiEnabled };
 
 export type CopilotResult =
   | { kind: "text"; text: string }
@@ -17,10 +16,7 @@ let configured = false;
 async function loadAgents() {
   const agents = await import("@openai/agents");
   if (!configured) {
-    const OpenAI = (await import("openai")).default;
-    agents.setDefaultOpenAIClient(
-      new OpenAI({ apiKey: process.env.OPENAI_API_KEY, baseURL: process.env.OPENAI_BASE_URL }),
-    );
+    agents.setDefaultOpenAIClient(await getOpenAIClient());
     agents.setOpenAIAPI("chat_completions"); // 第三方网关用 Chat Completions，不走 Responses API
     agents.setTracingDisabled(true);
     configured = true;

@@ -4,14 +4,17 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "./db/client";
-import { sku, poLine, purchaseOrder, stocktake, stocktakeCount } from "./db/schema";
-import { insertRows, setDocPosted, deletePendingDoc } from "./db/ledger";
-import { stockMap, pendingDocs, getPo, ledgerOf } from "./db/queries";
+import { sku, poLine, purchaseOrder, stocktake, stocktakeCount, type Sku } from "./db/schema";
+import { insertRows } from "./db/ledger";
+import { insertDraft, getDraft, deleteDraft, getDraftsByPo, postDraftAtomic } from "./db/draft";
+import { stockMap, getPo, ledgerOf, receivedByPo } from "./db/queries";
 import { requireUser } from "./session";
 import { signIn, signOut } from "./auth";
 import { can, DEMO_USERS, type Role } from "./constants";
 import { loadStocktakeView } from "./stocktake/engine";
 import { bizTypeOf } from "./stocktake/attribution";
+import { explainAttribution } from "./ai/explain";
+import { aiEnabled } from "./ai/client";
 import { seed } from "./db/seed";
 
 type Result = { ok: boolean; msg: string; docNo?: string };
@@ -48,14 +51,13 @@ export async function submitMove(raw: MoveInput): Promise<Result> {
       };
   }
   const doc = docNo(input.type);
-  await insertRows(
+  await insertDraft(
     input.entries.map((e) => ({
       skuCode: e.skuCode,
       delta: input.type === "IN" ? e.qty : -e.qty,
       bizType: input.type === "IN" ? "采购到货" : "销售出库",
       docNo: doc,
       operatorId: u.name,
-      status: "pending" as const,
       scanned: true,
     })),
   );
@@ -64,16 +66,40 @@ export async function submitMove(raw: MoveInput): Promise<Result> {
   return { ok: true, msg: `已提交 ${doc} · ${sum} 件（待复核）`, docNo: doc };
 }
 
-/** 双人复核通过：reviewer ≠ creator 强校验。 */
+/**
+ * 双人复核通过：reviewer ≠ creator 强校验 + 守恒护栏。
+ * 通过 postDraftAtomic 在单条原子语句里「校验落账后库存不为负 + 追加 posted 流水」，
+ * 杜绝两张待复核出库单各自初检通过、复核后双双打穿库存。
+ */
 export async function reviewDoc(doc: string): Promise<Result> {
   const u = await requireUser();
   if (!can.move(u.role)) return { ok: false, msg: "无权复核" };
-  const pend = await pendingDocs();
-  const rows = pend[doc];
-  if (!rows?.length) return { ok: false, msg: "单据不存在或已处理" };
+  const rows = await getDraft(doc);
+  if (!rows.length) return { ok: false, msg: "单据不存在或已处理" };
   if (rows[0].operatorId === u.name)
     return { ok: false, msg: "需由他人复核（录入人 ≠ 复核人）——请切换到另一账号复核" };
-  await setDocPosted(doc, u.name);
+
+  const posted = await postDraftAtomic(doc, u.name);
+  if (!posted.length) {
+    // 被守恒拦截：定位首个会打穿库存的 SKU，给出可读提示
+    const sm = await stockMap();
+    const need = new Map<string, number>();
+    for (const r of rows) need.set(r.skuCode, (need.get(r.skuCode) ?? 0) + r.delta);
+    let msg = "复核未通过：库存守恒校验失败（请先驳回或调整）";
+    for (const [code, dlt] of need) {
+      if ((sm[code] ?? 0) + dlt < 0) {
+        msg = `${code} 当前 ${sm[code] ?? 0} 件，复核入账会导致负库存（守恒拦截）`;
+        break;
+      }
+    }
+    return { ok: false, msg };
+  }
+  await deleteDraft(doc);
+
+  // 采购到货复核通过 → 推进采购单状态机（到货量由 posted 流水派生，单一真相）
+  const poRef = rows.find((r) => r.poRef)?.poRef;
+  if (poRef) await syncPoState(poRef);
+
   revalidateAll();
   return { ok: true, msg: `${doc} 已复核入账` };
 }
@@ -81,18 +107,42 @@ export async function reviewDoc(doc: string): Promise<Result> {
 export async function rejectDoc(doc: string): Promise<Result> {
   const u = await requireUser();
   if (!can.move(u.role)) return { ok: false, msg: "无权操作" };
-  await deletePendingDoc(doc);
+  const rows = await getDraft(doc);
+  if (!rows.length) return { ok: false, msg: "单据不存在或已处理" };
+  await deleteDraft(doc);
   revalidateAll();
-  return { ok: true, msg: `${doc} 已驳回` };
+  return { ok: true, msg: `${doc} 已驳回（草稿删除，从未影响库存）` };
 }
 
-/** 采购到货：生成入库（待复核）+ 回写 received + 推进状态机。 */
+/** 采购单状态机：到货量由 posted 流水派生回写，并据此推进状态（草稿/已下单 → 部分到货 → 已入库）。 */
+async function syncPoState(poNo: string) {
+  const po = await getPo(poNo);
+  if (!po) return;
+  const recv = await receivedByPo(poNo);
+  let allDone = true;
+  let any = false;
+  for (const l of po.lines) {
+    const capped = Math.min(Math.max(0, recv[l.skuCode] ?? 0), l.ordered);
+    await db.update(poLine).set({ received: capped }).where(eq(poLine.id, l.id));
+    if (capped < l.ordered) allDone = false;
+    if (capped > 0) any = true;
+  }
+  const status = allDone ? "已入库" : any ? "部分到货" : po.status;
+  await db.update(purchaseOrder).set({ status }).where(eq(purchaseOrder.poNo, poNo));
+}
+
+/**
+ * 采购到货：仅生成入库草稿（待复核），**不**预先回写到货进度 / 推进状态。
+ * 到货只有在复核入账后才作数——这样被驳回的到货不会留下「已入库却没货」的错账。
+ */
 export async function receivePO(poNo: string): Promise<Result> {
   const u = await requireUser();
   if (!can.po(u.role)) return { ok: false, msg: "无权操作采购单" };
   const po = await getPo(poNo);
   if (!po) return { ok: false, msg: "采购单不存在" };
   if (!["已下单", "部分到货"].includes(po.status)) return { ok: false, msg: "当前状态不可收货" };
+  if ((await getDraftsByPo(poNo)).length)
+    return { ok: false, msg: "该采购单已有待复核的到货单，请先复核或驳回" };
   const doc = docNo("IN");
   const rows = po.lines
     .filter((l) => l.ordered - l.received > 0)
@@ -104,18 +154,12 @@ export async function receivePO(poNo: string): Promise<Result> {
       operatorId: u.name,
       poRef: poNo,
       qc: true,
-      status: "pending" as const,
       scanned: true,
     }));
   if (!rows.length) return { ok: false, msg: "没有待收货明细" };
-  await insertRows(rows);
-  for (const l of po.lines) {
-    if (l.ordered - l.received > 0)
-      await db.update(poLine).set({ received: l.ordered }).where(eq(poLine.id, l.id));
-  }
-  await db.update(purchaseOrder).set({ status: "已入库" }).where(eq(purchaseOrder.poNo, poNo));
+  await insertDraft(rows);
   revalidateAll();
-  return { ok: true, msg: `${poNo} 登记到货，生成 ${doc}（待复核）`, docNo: doc };
+  return { ok: true, msg: `${poNo} 登记到货，生成 ${doc}（待复核，复核入账后才更新到货进度）`, docNo: doc };
 }
 
 /** 盘点过账：按归因追加盘盈/盘亏流水（串色成对），库存派生归零。仅老板。 */
@@ -221,10 +265,74 @@ export async function logoutAction(): Promise<void> {
   await signOut({ redirect: false });
 }
 
-/** 抽屉用：取某 SKU 的元信息 + 完整流水链。 */
+/** 字段级脱敏在数据层生效：成本价对仓管根本不出现在响应体里（不是前端藏字段）。 */
+function maskCost(s: Sku): Omit<Sku, "costPrice"> {
+  const copy: Record<string, unknown> = { ...s };
+  delete copy.costPrice;
+  return copy as Omit<Sku, "costPrice">;
+}
+
+/** 抽屉用：取某 SKU 的元信息 + 完整流水链（成本价按角色脱敏）。 */
 export async function fetchLedger(skuCode: string) {
-  await requireUser();
+  const u = await requireUser();
   const [s] = await db.select().from(sku).where(eq(sku.skuCode, skuCode));
+  const safeSku = s ? (can.cost(u.role) ? s : maskCost(s)) : null;
   const rows = await ledgerOf(skuCode);
-  return { sku: s ?? null, rows };
+  return { sku: safeSku, rows };
+}
+
+/**
+ * 第 2 层 AI 归因：把第 1 层确定性检测器的命中假设 + 证据交给 LLM 排序解释（HITL、按需触发）。
+ * 第 1 层仍是权威（分桶 / 金额 / 真损失不依赖 LLM）；无 key / 出错时优雅降级到检测器结论。
+ */
+export async function explainDiff(
+  skuCode: string,
+): Promise<{ ok: boolean; text: string; degraded?: boolean }> {
+  const u = await requireUser();
+  if (!can.recon(u.role)) return { ok: false, text: "无权查看对账归因" };
+  const view = await loadStocktakeView();
+  const row = view?.rows.find((r) => r.skuCode === skuCode);
+  if (!row) return { ok: false, text: "未找到该差异行" };
+  if (!aiEnabled())
+    return {
+      ok: true,
+      degraded: true,
+      text:
+        row.attr.reason +
+        "\n\n（未配置 OPENAI_API_KEY，以上为第 1 层确定性检测器结论；配置后可启用 LLM 二层排序解释。）",
+    };
+  const ledger = await ledgerOf(skuCode);
+  const ledgerBrief =
+    ledger
+      .filter((l) => l.status === "posted")
+      .map(
+        (l) =>
+          `${new Date(l.ts).toISOString().slice(0, 10)} ${l.bizType} ${l.delta > 0 ? "+" : ""}${l.delta}${l.qc === false ? "（未质检）" : ""}`,
+      )
+      .join("\n") || "（无流水）";
+  try {
+    const text = await explainAttribution({
+      styleName: row.sku.styleName,
+      color: row.sku.color,
+      size: row.sku.size,
+      book: row.book,
+      actual: row.actual,
+      diff: row.diff,
+      bucket: row.attr.bucket,
+      badge: row.attr.badge,
+      evidence: row.attr.ev,
+      ledgerBrief,
+    });
+    return { ok: true, text: text || row.attr.reason };
+  } catch (e) {
+    return {
+      ok: true,
+      degraded: true,
+      text:
+        row.attr.reason +
+        "\n\n（LLM 调用失败，已回退到检测器结论：" +
+        (e instanceof Error ? e.message : String(e)) +
+        "）",
+    };
+  }
 }

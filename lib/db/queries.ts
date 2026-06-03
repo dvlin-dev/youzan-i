@@ -2,14 +2,16 @@ import { db } from "./client";
 import {
   sku,
   stockLedger,
+  moveDraft,
   purchaseOrder,
   poLine,
   stocktake,
   stocktakeCount,
   type StockLedger,
+  type MoveDraft,
   type Sku,
 } from "./schema";
-import { eq, sql, asc, desc } from "drizzle-orm";
+import { and, eq, sql, asc, desc } from "drizzle-orm";
 
 export async function allSkus(): Promise<Sku[]> {
   return db.select().from(sku);
@@ -44,14 +46,26 @@ export function levelOf(qty: number, safety: number): "ok" | "warn" | "danger" {
   return "ok";
 }
 
-export async function pendingDocs(): Promise<Record<string, StockLedger[]>> {
-  const rows = await db
-    .select()
-    .from(stockLedger)
-    .where(eq(stockLedger.status, "pending"))
-    .orderBy(desc(stockLedger.id));
-  const m: Record<string, StockLedger[]> = {};
+/** 待复核单据 = 草稿（move_draft），按单据号分组。 */
+export async function pendingDocs(): Promise<Record<string, MoveDraft[]>> {
+  const rows = await db.select().from(moveDraft).orderBy(desc(moveDraft.id));
+  const m: Record<string, MoveDraft[]> = {};
   for (const r of rows) (m[r.docNo] ??= []).push(r);
+  return m;
+}
+
+/** 某采购单各 SKU 的「已到货量」= 该单 posted 入库流水累加（单一真相）。 */
+export async function receivedByPo(poNo: string): Promise<Record<string, number>> {
+  const rows = await db
+    .select({
+      skuCode: stockLedger.skuCode,
+      qty: sql<number>`coalesce(sum(${stockLedger.delta}),0)::int`,
+    })
+    .from(stockLedger)
+    .where(and(eq(stockLedger.poRef, poNo), eq(stockLedger.status, "posted")))
+    .groupBy(stockLedger.skuCode);
+  const m: Record<string, number> = {};
+  for (const r of rows) m[r.skuCode] = Number(r.qty);
   return m;
 }
 

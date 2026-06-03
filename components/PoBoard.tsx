@@ -7,7 +7,7 @@ import { yuan } from "@/lib/money";
 import { receivePO } from "@/lib/actions";
 
 type Line = { skuCode: string; ordered: number; received: number; price: number };
-type Po = { poNo: string; supplier: string; status: string; eta: string | null; lines: Line[] };
+type Po = { poNo: string; supplier: string; status: string; eta: string | null; lines: Line[]; pendingReceive?: boolean };
 const FLOW = ["草稿", "已下单", "部分到货", "已入库"];
 const pillClass = (s: string) => (s === "已入库" ? "ok" : s === "草稿" ? "neutral" : s === "部分到货" ? "warn" : "info");
 
@@ -92,7 +92,7 @@ function PoDrawer({ po, canCost, onClose, onReceive }: { po: Po; canCost: boolea
             <div style={{ fontWeight: 700, fontSize: 15, fontFamily: "var(--mono)" }}>{po.poNo}</div>
             <div className="dim" style={{ fontSize: 12.5 }}>{po.supplier}</div>
           </div>
-          <button className="icon-btn" onClick={onClose} style={{ marginLeft: "auto" }}>
+          <button className="icon-btn" onClick={onClose} style={{ marginLeft: "auto" }} aria-label="关闭">
             <Icon name="x" size={18} />
           </button>
         </div>
@@ -136,10 +136,16 @@ function PoDrawer({ po, canCost, onClose, onReceive }: { po: Po; canCost: boolea
               ))}
             </tbody>
           </table>
-          {["已下单", "部分到货"].includes(po.status) && (
-            <button className="btn primary" style={{ width: "100%", marginTop: 16, justifyContent: "center" }} onClick={() => onReceive(po.poNo)}>
-              <Icon name="in" size={15} /> 登记到货（生成入库单 · 待复核）
-            </button>
+          {po.pendingReceive ? (
+            <div className="hitl" style={{ borderRadius: 9, marginTop: 16, borderTop: "none" }}>
+              <Icon name="clock" size={13} /> 已有到货单待复核——复核入账后才更新到货进度
+            </div>
+          ) : (
+            ["已下单", "部分到货"].includes(po.status) && (
+              <button className="btn primary" style={{ width: "100%", marginTop: 16, justifyContent: "center" }} onClick={() => onReceive(po.poNo)}>
+                <Icon name="in" size={15} /> 登记到货（生成入库单 · 待复核）
+              </button>
+            )
           )}
         </div>
       </aside>

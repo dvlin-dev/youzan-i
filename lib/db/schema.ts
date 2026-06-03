@@ -47,7 +47,11 @@ export const sku = pgTable(
   (t) => [index("sku_style_idx").on(t.styleNo)],
 );
 
-/** 不可变流水：唯一真相源。库存 = SUM(delta) WHERE status='posted'。append-only。 */
+/**
+ * 不可变流水：唯一真相源。库存 = SUM(delta)（库内行皆 posted）。**append-only**——
+ * 只有 INSERT，没有 UPDATE / DELETE 入口；纠错只能追加反向流水（红冲）。
+ * 待复核的草稿不落在这里，而是 `move_draft`（见下），复核通过才作为 posted 行追加进来。
+ */
 export const stockLedger = pgTable(
   "stock_ledger",
   {
@@ -70,6 +74,31 @@ export const stockLedger = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("ledger_sku_idx").on(t.skuCode), index("ledger_status_idx").on(t.status)],
+);
+
+/**
+ * 待复核草稿：「改变库存的动作」在复核入账前的暂存区。
+ * 与不可变流水**物理隔离**——草稿可改可删（驳回即删），从不污染 ledger；
+ * 复核通过时由 `postDraftAtomic` 把草稿作为 posted 行追加进 `stock_ledger` 并删除草稿。
+ * 这样 `stock_ledger` 严格只增不改不删，「append-only」名副其实。
+ */
+export const moveDraft = pgTable(
+  "move_draft",
+  {
+    id: serial("id").primaryKey(),
+    docNo: text("doc_no").notNull(),
+    skuCode: text("sku_code")
+      .notNull()
+      .references(() => sku.skuCode),
+    delta: integer("delta").notNull(),
+    bizType: text("biz_type").notNull(),
+    operatorId: text("operator_id").notNull(),
+    poRef: text("po_ref"),
+    qc: boolean("qc"),
+    scanned: boolean("scanned").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("draft_doc_idx").on(t.docNo), index("draft_po_idx").on(t.poRef)],
 );
 
 export const purchaseOrder = pgTable("purchase_order", {
@@ -116,6 +145,8 @@ export const stocktakeCount = pgTable("stocktake_count", {
 export type Sku = typeof sku.$inferSelect;
 export type StockLedger = typeof stockLedger.$inferSelect;
 export type NewLedger = typeof stockLedger.$inferInsert;
+export type MoveDraft = typeof moveDraft.$inferSelect;
+export type NewMoveDraft = typeof moveDraft.$inferInsert;
 export type PurchaseOrder = typeof purchaseOrder.$inferSelect;
 export type PoLine = typeof poLine.$inferSelect;
 export type Stocktake = typeof stocktake.$inferSelect;

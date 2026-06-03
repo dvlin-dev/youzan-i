@@ -26,15 +26,15 @@ sku
 ### stock_ledger（不可变流水：唯一真相源）
 
 ```text
-stock_ledger          —— append-only，无 UPDATE / DELETE
+stock_ledger          —— append-only，只有 INSERT，无 UPDATE / DELETE（库内行皆 posted）
   id           PK
   sku_code     FK
   delta        有符号整数（入库为正；出库 / 盘亏为负）
   biz_type     期初 / 采购到货 / 销售出库 / 调拨 / 盘盈 / 盘亏 / 红冲 …
   doc_no       关联单据号（入库单 / 出库单 / 采购单 / 盘点单）
   ts           业务时间
-  operator_id  录入人        reviewer_id  复核人（null = 待复核）
-  status       pending | posted        （仅 posted 计入库存）
+  operator_id  录入人        reviewer_id  复核人
+  status       posted（保留枚举；落进本表即已入账，计入库存）
   scanned      是否扫码录入（false = 手输，归因风险信号）
   qc           收货是否点数 / 质检（归因信号）
   po_ref       关联采购单（归因信号）
@@ -42,6 +42,8 @@ stock_ledger          —— append-only，无 UPDATE / DELETE
 ```
 
 > 库存查询：`stock(sku) = Σ delta WHERE sku_code = ? AND status = 'posted'`。
+
+**待复核草稿不进不可变流水。** 「改变库存的动作」在复核前暂存于独立的 `move_draft`（`doc_no / sku_code / delta / biz_type / operator_id / po_ref / qc / scanned`）——草稿可改可删、驳回即删，从不污染 `stock_ledger`。复核通过时由 `postDraftAtomic` 在**单条原子语句**里「校验落账后库存不为负 + 把草稿作为 posted 行追加进 ledger」，随后删除草稿。这样 `stock_ledger` 严格只增不改不删，并发出库也无法打穿库存。
 
 ### purchase_order / po_line（采购单 + 明细）
 

@@ -32,8 +32,10 @@ const ms = (x: Date | string) => new Date(x).getTime();
 const hm = (x: Date | string) => new Date(x).toISOString().slice(5, 16).replace("T", " ");
 
 /**
- * 第 1 层：确定性检测器 + 第 2 层措辞（规则模拟）。
- * 只对系统真有的证据做关联；查不到就诚实兜底，绝不编原因。
+ * 第 1 层归因：确定性检测器（权威）。逐项排查只对系统真有的证据做关联——
+ * 命中则给出分桶 / 证据 / 金额 / 真损失判定，查不到就诚实兜底，绝不编原因。
+ * 这些结果是产品里盘点数字与分桶的唯一依据；
+ * 第 2 层「LLM 排序解释」是按需增强（见 lib/ai/explain.ts 与 actions.explainDiff），不改变第 1 层结论。
  */
 export function attribute(ctx: AttrCtx): Attribution {
   const { sku, diff, ledger, snapTs, siblings, poOrdered } = ctx;

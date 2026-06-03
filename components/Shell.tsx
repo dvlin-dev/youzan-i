@@ -49,14 +49,16 @@ export function Shell({
   const path = usePathname();
   const router = useRouter();
   const [ai, setAi] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const [, startTransition] = useTransition();
   const nav = NAV[user.role];
   const title = TITLES[path] ?? "";
 
   return (
     <ToastProvider>
-      <div className="app">
-        <aside className="sidebar">
+      <div className={"app" + (navOpen ? " nav-open" : "")}>
+        {navOpen && <div className="nav-scrim" onClick={() => setNavOpen(false)} />}
+        <aside className={"sidebar" + (navOpen ? " open" : "")}>
           <div className="brand">
             <span className="logo">
               <Icon name="box" size={18} />
@@ -68,7 +70,12 @@ export function Shell({
           </div>
           <div className="nav-label">主菜单</div>
           {nav.map(([href, label, icon]) => (
-            <Link key={href} href={href} className={"nav-item" + (path === href ? " active" : "")}>
+            <Link
+              key={href}
+              href={href}
+              className={"nav-item" + (path === href ? " active" : "")}
+              onClick={() => setNavOpen(false)}
+            >
               <Icon name={icon} />
               <span>{label}</span>
               {href === "/move" && pendingCount > 0 && <span className="badge-n">{pendingCount}</span>}
@@ -104,6 +111,7 @@ export function Shell({
               <button
                 className="icon-btn"
                 title="退出登录"
+                aria-label="退出登录"
                 style={{ marginLeft: "auto", color: "#857c68" }}
                 onClick={() =>
                   startTransition(async () => {
@@ -120,6 +128,14 @@ export function Shell({
 
         <div className="main">
           <header className="topbar">
+            <button
+              className="icon-btn nav-toggle"
+              onClick={() => setNavOpen((v) => !v)}
+              aria-label="打开菜单"
+              aria-expanded={navOpen}
+            >
+              <Icon name="menu" size={20} />
+            </button>
             <div className="page-title">{title}</div>
             <div className="spacer" />
             <button className="ai-btn" onClick={() => setAi(true)}>

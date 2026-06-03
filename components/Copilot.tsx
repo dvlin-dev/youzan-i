@@ -73,7 +73,7 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
               <Icon name="shield" size={11} /> 经 typed 工具层 · 写操作需你确认
             </div>
           </div>
-          <button className="icon-btn" onClick={onClose} style={{ marginLeft: "auto" }}>
+          <button className="icon-btn" onClick={onClose} style={{ marginLeft: "auto" }} aria-label="关闭 AI 助手">
             <Icon name="x" size={18} />
           </button>
         </div>
@@ -155,7 +155,7 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
                 }
               }}
             />
-            <button className="cop-send" onClick={() => send(input)}>
+            <button className="cop-send" onClick={() => send(input)} aria-label="发送">
               <Icon name="send" size={17} />
             </button>
           </div>
