@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Streamdown：让 Tailwind 收集其组件里的工具类（AI 回复的 Markdown 渲染） */
+@source "../node_modules/streamdown/dist/*.js";
 
 :root {
   --bg: #f1ece2;
@@ -1053,10 +1055,84 @@ h2.sec {
     transform: rotate(360deg);
   }
 }
+/* AI 回复（Streamdown 渲染的 Markdown）——贴合暖色账册主题、紧凑间距 */
 .cop-answer {
-  white-space: pre-wrap;
   line-height: 1.6;
   margin: 1px 0;
+}
+.cop-answer > :first-child {
+  margin-top: 0;
+}
+.cop-answer > :last-child {
+  margin-bottom: 0;
+}
+.cop-answer p {
+  margin: 7px 0;
+}
+.cop-answer ul,
+.cop-answer ol {
+  margin: 7px 0;
+  padding-left: 1.3em;
+}
+.cop-answer ul {
+  list-style: disc;
+}
+.cop-answer ol {
+  list-style: decimal;
+}
+.cop-answer li {
+  margin: 3px 0;
+}
+.cop-answer strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+.cop-answer a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+.cop-answer code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+.cop-answer pre {
+  background: var(--surface-2);
+  padding: 10px 12px;
+  border-radius: 8px;
+  overflow: auto;
+  margin: 7px 0;
+}
+.cop-answer pre code {
+  background: none;
+  padding: 0;
+}
+.cop-answer h1,
+.cop-answer h2,
+.cop-answer h3,
+.cop-answer h4 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 10px 0 4px;
+}
+.cop-answer hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 10px 0;
+}
+.cop-answer table {
+  border-collapse: collapse;
+  margin: 7px 0;
+  font-size: 12.5px;
+}
+.cop-answer th,
+.cop-answer td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: left;
 }
 .toolcard {
   margin-top: 10px;

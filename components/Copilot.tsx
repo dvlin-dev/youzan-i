@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Streamdown } from "streamdown";
 import { Icon } from "./icons";
 import type { Role } from "@/lib/constants";
 
@@ -16,13 +17,6 @@ const SUGG: Record<Role, string[]> = {
   buyer: ["帮我对一下账，差在哪", "哪些 SKU 快断货了？", "查 AW2024-9902 卡其 L 库存"],
   admin: ["看看哪些快断货了，都补到 30", "AW2024-3301 藏青 M 入 30、黑 M 出 20", "帮我对一下账，差在哪"],
 };
-
-/** 极简富文本：把 **加粗** 渲染为 <strong>，其余按纯文本（换行由 pre-wrap 处理）。 */
-function renderRich(text: string) {
-  return text.split(/(\*\*[^*\n]+\*\*)/g).map((p, i) =>
-    p.startsWith("**") && p.endsWith("**") ? <strong key={i}>{p.slice(2, -2)}</strong> : p,
-  );
-}
 
 const appendText = (parts: Part[], kind: "thought" | "text", delta: string): Part[] => {
   const last = parts[parts.length - 1];
@@ -162,7 +156,7 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
             ) : (
               <div key={m.id} className="msg ai">
                 {m.parts.map((p, i) => {
-                  if (p.kind === "thought") return <div key={i} className="cop-thought">{p.text}</div>;
+                  if (p.kind === "thought") return <div key={i} className="cop-thought">{p.text.replace(/\*\*/g, "")}</div>;
                   if (p.kind === "tool")
                     return (
                       <div key={p.id} className={"cop-tool " + p.status}>
@@ -172,7 +166,7 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
                     );
                   return (
                     <div key={i} className="cop-answer">
-                      {renderRich(p.text)}
+                      <Streamdown>{p.text}</Streamdown>
                     </div>
                   );
                 })}
