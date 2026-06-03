@@ -145,7 +145,6 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
           {msgs.length === 0 && (
             <div className="msg ai">
               你好，我是云链 AI 助手 👋 可以用自然语言让我<b>查库存、连续出入库、对账</b>。
-              {"\n\n"}出入库我会直接生成<b>待复核单</b>（一句话里多笔会一次办完）——不直接改库，去「入库/出库 → 待复核」<b>审批</b>后才入账。
             </div>
           )}
           {msgs.map((m) =>
