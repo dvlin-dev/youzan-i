@@ -21,7 +21,8 @@
 | 盘点对账 / AI 归因 | `docs/design/stocktake-reconciliation.md` | `lib/stocktake/*`（第 1 层）、`lib/ai/explain.ts`（第 2 层） |
 | AI-Native 架构 / 工具层 | `docs/design/ai-native-architecture.md` | `lib/actions.ts`、`lib/ai/*`、`app/api/copilot/*` |
 | 交互与体验 | `docs/design/ux-principles.md` | `app/*`、`components/*` |
-| 工程规范 | `docs/reference/engineering-standards.md` | — |
+| 技术栈 / 代码结构 | `docs/design/tech-stack.md` | 生产代码全树 + 不变量落地映射 |
+| 编码 / 协作规范 | `docs/reference/coding-conventions.md` | — |
 | 评测 / 回归 | `docs/reference/evaluation-rubric.md` | `tests/*` |
 | 参考实现（原型） | `jxc-prototype.html` | 将被 Next.js 版替换 |
 

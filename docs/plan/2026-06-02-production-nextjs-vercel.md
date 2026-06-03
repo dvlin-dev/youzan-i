@@ -1,7 +1,7 @@
 # 生产化计划：原型 → Next.js + Postgres + Vercel 一键部署
 
 > 状态：进行中（计划）。目标把 `jxc-prototype.html` 升级为生产级全栈应用，带后端数据库，可一键部署 Vercel。
-> 规范事实见 `../design/`，工程规范见 `../reference/engineering-standards.md`；本计划完成后把稳定事实回写过去。
+> 规范事实见 `../design/`（技术栈/结构见 `../design/tech-stack.md`），编码/协作规范见 `../reference/coding-conventions.md`；本计划完成后把稳定事实回写过去。
 
 ## 1. 目标与验收
 
@@ -13,7 +13,7 @@
 
 ## 2. 技术栈（定档）
 
-Next.js 15（App Router / RSC / Server Actions）· React 19 · TypeScript strict · Drizzle ORM · **Vercel Postgres（Neon）** · Auth.js v5 · Tailwind + shadcn/ui · Zod · **@openai/agents（OpenAI Agents SDK）** · Vitest + Playwright · pnpm。理由见 `../reference/engineering-standards.md`。
+Next.js 15（App Router / RSC / Server Actions）· React 19 · TypeScript strict · Drizzle ORM · **Vercel Postgres（Neon）** · Auth.js v5 · Tailwind + shadcn/ui · Zod · **@openai/agents（OpenAI Agents SDK）** · Vitest + Playwright · pnpm。（此为当时定档；最终落地选型以 `../design/tech-stack.md` 为准。）
 
 > AI 运行时经 OpenAI 兼容网关接入：`setDefaultOpenAIClient(new OpenAI({ apiKey: OPENAI_API_KEY, baseURL: OPENAI_BASE_URL }))` + `setOpenAIAPI('chat_completions')`，模型名取 `OPENAI_MODEL`。
 
