@@ -3,11 +3,18 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { LedgerDrawer } from "@/components/LedgerDrawer";
-import { adoptStocktakeRow, postAllStocktake, resetDemo } from "@/lib/actions";
+import {
+  adoptStocktakeRow,
+  createStocktake,
+  postAllStocktake,
+  resetDemo,
+} from "@/lib/actions";
+import type { CountRow } from "@/lib/stocktake/engine";
 
 import { useToast } from "../toast";
 import { CauseSummary } from "./components/CauseSummary";
 import { DiffTable } from "./components/DiffTable";
+import { StocktakeEntry } from "./components/StocktakeEntry";
 import { StocktakeHeader } from "./components/StocktakeHeader";
 import type { Row, Summary } from "./types";
 
@@ -20,7 +27,9 @@ export function StocktakeBoard(props: {
   countedAt: string;
   rows: Row[];
   summary: Summary;
+  counts: CountRow[];
   canPost: boolean;
+  canManage: boolean;
   canCost: boolean;
 }) {
   const {
@@ -32,10 +41,13 @@ export function StocktakeBoard(props: {
     countedAt,
     rows,
     summary,
+    counts,
     canPost,
+    canManage,
   } = props;
   const [sel, setSel] = useState<Row | null>(null);
   const [busy, setBusy] = useState(false);
+  const [entering, setEntering] = useState(false);
   const router = useRouter();
   const toast = useToast();
   const posted = status === "已过账";
@@ -65,6 +77,13 @@ export function StocktakeBoard(props: {
     setBusy(false);
     if (r.ok) router.refresh();
   }
+  async function startNew() {
+    setBusy(true);
+    const r = await createStocktake();
+    toast(r.msg, r.ok ? "ok" : "err");
+    setBusy(false);
+    if (r.ok) router.refresh();
+  }
 
   return (
     <>
@@ -83,9 +102,36 @@ export function StocktakeBoard(props: {
         onReset={reset}
       />
 
-      <CauseSummary summary={summary} />
+      {canManage && (
+        <div
+          className="toolbar"
+          style={{ display: "flex", gap: 10, marginBottom: 14 }}
+        >
+          {!posted && (
+            <button className="btn sm" onClick={() => setEntering((e) => !e)}>
+              {entering ? "← 返回对账" : "录实盘"}
+            </button>
+          )}
+          {posted && (
+            <button
+              className="btn primary sm"
+              onClick={startNew}
+              disabled={busy}
+            >
+              {busy ? "发起中…" : "发起新盘点"}
+            </button>
+          )}
+        </div>
+      )}
 
-      <DiffTable rows={rows} openCount={open.length} onSelect={setSel} />
+      {entering ? (
+        <StocktakeEntry rows={counts} onDone={() => setEntering(false)} />
+      ) : (
+        <>
+          <CauseSummary summary={summary} />
+          <DiffTable rows={rows} openCount={open.length} onSelect={setSel} />
+        </>
+      )}
 
       {sel && (
         <LedgerDrawer

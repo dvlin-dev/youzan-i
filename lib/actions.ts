@@ -17,7 +17,14 @@ import {
   postDraftAtomic,
 } from "./db/draft";
 import { insertRows } from "./db/ledger";
-import { allSkus, getPo, ledgerOf, receivedByPo, stockMap } from "./db/queries";
+import {
+  activeStocktake,
+  allSkus,
+  getPo,
+  ledgerOf,
+  receivedByPo,
+  stockMap,
+} from "./db/queries";
 import {
   type Sku,
   poLine,
@@ -370,6 +377,76 @@ export async function postAllStocktake(): Promise<Result> {
       ok: true,
       msg: `盘点过账完成：${n} 个 SKU 已生成差异调整流水（老板审批）`,
     };
+  });
+}
+
+/**
+ * 发起一次盘点：账面快照由**当前 posted 库存当场派生**（库存 = 流水累加的定义，
+ * 不再依赖写死的快照常量）；为每个 SKU 建一行 stocktakeCount，实盘默认 = 账面（差异 0），
+ * 待用户去「录实盘」改成实际数。
+ */
+export async function createStocktake(scope = "全仓盘点"): Promise<Result> {
+  return tryResult(async () => {
+    const u = await requireUser();
+    if (!can.recon(u.role)) return { ok: false, msg: "无权发起盘点" };
+    const existing = await activeStocktake();
+    if (existing && existing.status !== "已过账")
+      return { ok: false, msg: "已有未过账的盘点单，请先过账或处理它" };
+    const sm = await stockMap();
+    const skus = await allSkus();
+    const now = new Date();
+    const pdNo = docNo("PD");
+    await db.insert(stocktake).values({
+      pdNo,
+      scope,
+      status: "待复核",
+      snapTs: now,
+      counter: u.name,
+      createdBy: u.name,
+      countedAt: now,
+    });
+    await db.insert(stocktakeCount).values(
+      skus.map((s) => ({
+        pdNo,
+        skuCode: s.skuCode,
+        bookSnapshot: sm[s.skuCode] ?? 0,
+        actual: sm[s.skuCode] ?? 0,
+        resolved: false,
+      })),
+    );
+    revalidateAll();
+    return {
+      ok: true,
+      msg: `已发起盘点 ${pdNo}，去「录实盘」录入实盘数`,
+      docNo: pdNo,
+    };
+  });
+}
+
+/** 录实盘：把某 SKU 的实盘数写进进行中的盘点（差异由 账面 − 实盘 派生）。 */
+export async function saveCount(
+  skuCode: string,
+  actual: number,
+): Promise<Result> {
+  return tryResult(async () => {
+    const u = await requireUser();
+    if (!can.recon(u.role)) return { ok: false, msg: "无权录入实盘" };
+    if (!Number.isInteger(actual) || actual < 0)
+      return { ok: false, msg: "实盘数须为非负整数" };
+    const st = await activeStocktake();
+    if (!st) return { ok: false, msg: "无进行中的盘点" };
+    if (st.status === "已过账") return { ok: false, msg: "盘点已过账，不可改" };
+    await db
+      .update(stocktakeCount)
+      .set({ actual })
+      .where(
+        and(
+          eq(stocktakeCount.pdNo, st.pdNo),
+          eq(stocktakeCount.skuCode, skuCode),
+        ),
+      );
+    revalidateAll();
+    return { ok: true, msg: "已记录实盘" };
   });
 }
 

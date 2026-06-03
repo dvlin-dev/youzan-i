@@ -90,3 +90,46 @@ export function summarize(rows: DiffRow[]) {
   }
   return { loss, real, recover, buckets };
 }
+
+export type CountRow = {
+  skuCode: string;
+  styleNo: string;
+  styleName: string;
+  color: string;
+  size: string;
+  book: number;
+  actual: number;
+};
+
+/** 录实盘用：进行中盘点的**全部**计数行（含账面与当前实盘），不像 view 只给差异行。 */
+export async function loadStocktakeCounts(): Promise<{
+  pdNo: string;
+  status: string;
+  rows: CountRow[];
+} | null> {
+  const st = await activeStocktake();
+  if (!st) return null;
+  const skus = await allSkus();
+  const skuMap = new Map(skus.map((s) => [s.skuCode, s]));
+  const rows: CountRow[] = [];
+  for (const c of st.counts) {
+    const s = skuMap.get(c.skuCode);
+    if (!s) continue;
+    rows.push({
+      skuCode: c.skuCode,
+      styleNo: s.styleNo,
+      styleName: s.styleName,
+      color: s.color,
+      size: s.size,
+      book: c.bookSnapshot,
+      actual: c.actual,
+    });
+  }
+  rows.sort(
+    (a, b) =>
+      a.styleNo.localeCompare(b.styleNo) ||
+      a.color.localeCompare(b.color) ||
+      a.size.localeCompare(b.size),
+  );
+  return { pdNo: st.pdNo, status: st.status, rows };
+}
