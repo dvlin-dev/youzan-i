@@ -1,0 +1,11 @@
+node_modules/
+.next/
+out/
+build/
+.vercel/
+*.tsbuildinfo
+pnpm-lock.yaml
+# 手工精排的产物 / 长文档，不交给 prettier 重排
+public/
+*.html
+**/*.md

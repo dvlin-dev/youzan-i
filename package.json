@@ -3,12 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@11.4.0",
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "node --env-file=.env.local --env-file=.env node_modules/vitest/vitest.mjs run tests/query-sql.integration.test.ts",
@@ -32,6 +37,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@trivago/prettier-plugin-sort-imports": "^6.0.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -39,6 +45,7 @@
     "drizzle-kit": "^0.30.6",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "prettier": "^3.8.3",
     "tailwindcss": "^4",
     "tsx": "^4.19.2",
     "typescript": "^5",
