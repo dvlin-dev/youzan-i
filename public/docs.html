@@ -160,9 +160,6 @@
   ol.steps li { counter-increment: st; position: relative; padding: 10px 14px 10px 46px; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; font-size: 14px; color: var(--text-2); box-shadow: var(--shadow); }
   ol.steps li b { color: var(--ink); }
   ol.steps li::before { content: counter(st); position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 7px; background: var(--primary-weak); color: var(--primary-600); font-family: var(--mono); font-weight: 700; font-size: 12px; display: grid; place-items: center; }
-  ul.snips { margin: 0; padding-left: 18px; }
-  ul.snips li { font-size: 13.5px; color: var(--text-2); margin: 7px 0; }
-  ul.snips li b { color: var(--ink); }
 
   /* closing */
   .closing { background: var(--ink); color: #ece6d8; }
@@ -286,7 +283,7 @@
 <!-- 差三万 -->
 <section id="recon">
   <div class="wrap">
-    <div class="sec-h">招牌场景</div>
+    <div class="sec-h">典型场景</div>
     <h2>AI 把“差三万”拆成可执行的几摞</h2>
     <p class="intro">同一份盘点差异：<b>第 1 层确定性检测器</b>给出权威分桶与金额（可复现），<b>第 2 层 LLM</b> 在第 1 层证据上按需排序解释。</p>
     <div class="stats">
@@ -408,7 +405,7 @@
         <tr>
           <td><b>docs/reference/</b></td>
           <td><b>跨需求可复用</b>的工程规范与方法论：编码/协作规范、评分卡、模板、交付方法论。</td>
-          <td class="mono">coding-conventions · evaluation-rubric · prompt-skill-templates · ai-delivery-methodology</td>
+          <td class="mono">coding-conventions · evaluation-rubric · ai-delivery-methodology</td>
         </tr>
       </tbody>
     </table>
@@ -422,18 +419,18 @@
   </div>
 </section>
 
-<!-- 交付方法论 / 面试 5 问 -->
+<!-- 交付方法论 -->
 <section id="delivery">
   <div class="wrap">
     <div class="sec-h">交付方法论</div>
-    <h2>用 AI 把它做出来的 · 面试关心的 5 个问题</h2>
-    <p class="intro">不止“用 AI 写代码”，而是一套可复现的“需求 → 产品”交付流程：原型先行、文档对齐、知识库治理、可回归评估。下面按面试常问的 5 个问题展开。</p>
+    <h2>从一句模糊需求，到可上线的产品</h2>
+    <p class="intro">不止“用 AI 写代码”，而是一套可复现的“需求 → 产品”交付流程：原型先行、文档对齐、知识库治理、可回归评估。下面拆成五件事——拆解编排、工具链路、翻车救场、工作流迭代、评估判断。</p>
 
     <div class="qa first">
       <div class="qa-h"><span class="qa-n">Q1</span><h4>拆解与编排</h4><span class="qa-ask">怎么把模糊描述拆成 AI 能执行的输入？</span></div>
       <div class="qa-a">
         <p>先给一个<b>大概的需求</b> → 让 AI <b>联网调研</b>（社区实践 + 论文，给方案找先验）→ 让它先出一个<b>高保真原型</b> → 基于原型<b>快速对齐</b>成想要的样子 → 再把稳定结论<b>沉淀成架构与知识库</b>。关键：不在“写完一大坨代码”之后才对齐，而是用低成本的原型先把方向与数据模型敲定。</p>
-        <p>prompt / skill / 子任务的组织靠知识库：根 <span class="mono">CLAUDE.md</span> 做事实源路由 + <span class="mono">reference/prompt-skill-templates</span> 四个可复用模板（需求澄清 / 生成页面 / 生成 mock / 自检），把模糊原话翻译成“数据动作 + 默认值 + 阻塞分类”。</p>
+        <p>把模糊原话翻译成“数据动作 + 默认值 + 阻塞分类”，靠的是一套<b>有治理规则的知识库</b>：根 <span class="mono">CLAUDE.md</span> 路由事实源，<span class="mono">docs/{design, plan, reference}</span> 分层维护——新需求先写 <span class="mono">plan/</span>、稳定结论回写 <span class="mono">design/</span> 或 <span class="mono">reference/</span>、同一主题只保留一个事实源。于是每一次拆解都基于<b>同一份稳定上下文</b>，而不是临时拍脑袋（详见「研发知识库」一节）。</p>
       </div>
     </div>
 
@@ -486,31 +483,16 @@
     <div class="qa">
       <div class="qa-h"><span class="qa-n">Q5</span><h4>评估与判断</h4><span class="qa-ask">怎么判断这版比上一版好？靠感觉还是可重复标准？</span></div>
       <div class="qa-a">
-        <p><b>原型期</b>偏人工判断，但脑子里有明确的执行 case——主链路（入库 → 预警 → 采购 → 盘点）必须能跑通。<b>落地期</b>转为两类可重复的自动化评估：</p>
-        <div class="grid g2">
-          <div class="card"><div class="kicker">① 单工具执行测试</div><h4>保证每个 tool 的逻辑正确</h4><p>给工具写测试用例——Vitest：库存守恒不变量 I1 / I2 + 6 类归因检测器回归。</p></div>
-          <div class="card"><div class="kicker">② 加上 AI 的端到端测试</div><h4>看整条链路能否达预期</h4><p>人工累积具体场景，调用 AI 跑完整流程——agent-browser 跑 copilot 全链路（一句话补货 → 5 张待复核单 → 审批入账）。</p></div>
+        <p><b>原型期</b>偏人工判断，但脑子里有明确的执行 case——主链路（入库 → 预警 → 采购 → 盘点）必须能跑通。<b>落地期</b>转为三层可重复评估（前两层是工具链路，第三层是页面级）：</p>
+        <div class="grid g3">
+          <div class="card"><div class="kicker">① 工具链路 · 单工具测试</div><h4>每个 tool 逻辑正确</h4><p>固定数据的测试用例，验证工具本身——Vitest：库存守恒 I1 / I2 + 6 类归因检测器回归。</p></div>
+          <div class="card"><div class="kicker">② 工具链路 · AI 端到端</div><h4>AI 能否正确编排工具</h4><p>Mock 一批场景，让 AI 驱动整条工具流程，断言它<b>调对了工具</b>——与跑测试用例同理，只是改由 AI 跑。</p></div>
+          <div class="card"><div class="kicker">③ 页面级 · AI 测页面</div><h4>看页面真实效果</h4><p>用 AI（agent-browser）操作页面、核对效果——预填登录 / RBAC 脱敏 / 盘点数 / copilot 全链路。</p></div>
         </div>
         <p>再加<b>六维评分卡 + RC-01..09 回归用例</b>作为“好不好”的可重复标准（见 <span class="mono">reference/evaluation-rubric</span>）。一句话：好不好是<b>算出来的</b>，不是感觉出来的。</p>
       </div>
     </div>
 
-    <h3 class="sub">附：demo 与最能体现思路的几段对话</h3>
-    <div class="grid g2">
-      <div class="card">
-        <h4>可访问的成果</h4>
-        <p>在线应用 <span class="mono">youzan-i-bowlingqs-projects.vercel.app</span>（三角色预填账号）· 本页讲解 <span class="mono">/docs</span> · GitHub 源码与提交历史。</p>
-      </div>
-      <div class="card">
-        <h4>体现思路的对话片段</h4>
-        <ul class="snips">
-          <li>「实盘到底进不进状态？」——一句追问推翻初版，确立 <b>实盘 = 一次性校准输入</b>，长期痕迹是它生成的盘盈 / 盘亏流水。</li>
-          <li>「系统做得好，为什么还有对账差异？」——逼出 <b>两类差异 + 6 类成因 + 两层归因</b>。</li>
-          <li>「AI 反复要色码、不够聪明」——定位到 low_stock 输出结构 + prompt 过度收敛 + 未开 reasoning，重构后<b>一轮搞定补货</b>。</li>
-          <li>评审驱动：按业务把“双人复核”改为 <b>单人审批闸</b>，同时补上并发<b>守恒护栏</b>。</li>
-        </ul>
-      </div>
-    </div>
   </div>
 </section>
 

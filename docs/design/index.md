@@ -10,7 +10,7 @@
 | [tech-stack.md](./tech-stack.md) | 技术栈选型、代码目录 / 模块职责、核心不变量 → 代码落地映射 |
 | [ux-principles.md](./ux-principles.md) | 操作台设计立场、关键交互模式、Excel 平滑迁移 |
 
-讲解 / 演示：单文件幻灯（产品视角如何解决问题 + 技术架构），`↓ / →` 翻页，面试讲解用。
+讲解 / 演示：单页讲解文档（产品如何解决问题 + 技术架构 + 研发知识库 + 交付方法论），演示讲解用。
 源文件 `public/docs.html`，线上经 `/docs` 路由直达（`next.config.ts` rewrite）：[线上 /docs](https://youzan-i-bowlingqs-projects.vercel.app/docs) ·本地 `pnpm dev` 后 http://localhost:3000/docs 。
 
 参考实现：仓库根目录 `jxc-prototype.html`（单文件原型，已落地以上多数规范）。

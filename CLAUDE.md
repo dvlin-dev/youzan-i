@@ -43,7 +43,7 @@
 | --- | --- |
 | `docs/design/` | 已确认的架构、数据模型、能力边界——长期维护的**规范事实源** |
 | `docs/plan/` | 当前需求的执行计划、任务清单、验证记录 |
-| `docs/reference/` | 长期工程规范、评分卡、Prompt/Skill 模板、AI 交付方法论 |
+| `docs/reference/` | 长期工程规范、评分卡、AI 交付方法论 |
 
 新需求默认先写 `docs/plan/`；被采纳的稳定事实回写 `docs/design/` 或 `docs/reference/`，**同一主题只保留一个事实源**。
 

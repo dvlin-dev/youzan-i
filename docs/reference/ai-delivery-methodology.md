@@ -2,7 +2,7 @@
 
 > **文档定位（reference / 方法论叙事）**：本文是这套系统的**交付思路与方法论全文**（亦即面试答卷原稿），保留完整的叙事、翻车救场、工作流迭代与对话片段。
 > **它不是规范事实源**。领域模型、盘点对账、AI-Native 架构等**规范事实以 `docs/design/` 为准**，工程规范与评分卡以 `docs/reference/` 内对应文档为准，当前要做的工程化计划见 `docs/plan/`。本文与那些文档若有冲突，以 design / reference 的专题文档为准。
-> 章节速查：第 1 章拆解编排 → [reference/index](./index.md)；第 2 章数据模型 → [design/domain-model](../design/domain-model.md) 与 [design/stocktake-reconciliation](../design/stocktake-reconciliation.md)；第 3 章交互 → [design/ux-principles](../design/ux-principles.md)；第 4/5 章 AI-Native 与工具链 → [design/ai-native-architecture](../design/ai-native-architecture.md)；第 8 章评估 → [reference/evaluation-rubric](./evaluation-rubric.md)；附录模板 → [reference/prompt-skill-templates](./prompt-skill-templates.md)。
+> 章节速查：第 1 章拆解编排 → [reference/index](./index.md)；第 2 章数据模型 → [design/domain-model](../design/domain-model.md) 与 [design/stocktake-reconciliation](../design/stocktake-reconciliation.md)；第 3 章交互 → [design/ux-principles](../design/ux-principles.md)；第 4/5 章 AI-Native 与工具链 → [design/ai-native-architecture](../design/ai-native-architecture.md)；第 8 章评估 → [reference/evaluation-rubric](./evaluation-rubric.md)。
 
 > 把客户那段 80 字的口语化抱怨，变成一条**可复现的"需求 → 产品"流水线**，而不是一次性的灵感 demo。
 
@@ -21,7 +21,6 @@
 | 3 交互与体验 | [design/ux-principles](../design/ux-principles.md) |
 | 4 AI-Native 架构 · 5 工具链路 | [design/ai-native-architecture](../design/ai-native-architecture.md) |
 | 8 评估与判断 | [reference/evaluation-rubric](./evaluation-rubric.md) |
-| 附录 · 模板 | [reference/prompt-skill-templates](./prompt-skill-templates.md) |
 
 ## 0. 解题总览
 
@@ -764,9 +763,3 @@ jxc-demo/
 ### 9.3 给面试官的总结陈词
 
 我交付的不只是一个能点的进销存 Demo，而是一套可复现、可评估、可迭代的"需求 → 产品"流水线：先把模糊原话翻译成"数据动作 + 默认值 + 阻塞分类"，再用一份带可执行断言的数据契约（库存守恒）锁住所有页面，最后用一张评分卡让 AI 对自己自检。这套流程的价值在于每一步都有标尺——契约判对错，评分卡判优劣，所以"这版比上版好"是算出来的、不是感觉出来的。换一个客户、换一个需求（比如换成餐饮门店的进销存），我把"款号 × 颜色 × 尺码"换成对应的业务维度、把守恒不变量重写一条，同一套流程能原样再跑一遍。更进一步：这套以"不可变流水 + 可执行不变量 + 角色校验"为核心的安全地基，不仅让方案可复现、可评估、可迭代，还天然支撑 AI-Native 演进——正如片段五所示，让 AI 经工具层动库存、用 HITL 双人复核兜底、每个动作可审计，从"人点按钮"平滑长出"自然语言驱动"而不破坏任何不变量。
-
----
-
-## 附录：可复用 Prompt / Skill 模板
-
-> 已迁出 → [reference/prompt-skill-templates](./prompt-skill-templates.md)。
