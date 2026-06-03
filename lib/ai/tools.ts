@@ -35,8 +35,12 @@ export function createTools(agents: Agents, ctx: ToolCtx) {
 
   const queryStock = tool({
     name: "query_stock",
-    description: "查询某 SKU 的当前库存数量",
-    parameters: z.object({ styleNo: z.string(), color: z.string(), size: z.string() }),
+    description: "查某个 SKU 当前还有多少件库存。用户问『还剩多少 / 库存多少』时用。",
+    parameters: z.object({
+      styleNo: z.string().describe("款号，如 AW2024-3301"),
+      color: z.string().describe("颜色，去掉多余的『色』字，如 藏青 / 黑 / 米白"),
+      size: z.string().describe("尺码，取值 S / M / L / XL / 2XL"),
+    }),
     execute: async ({ styleNo, color, size }) => {
       const key = `${styleNo}-${color}-${size}`;
       if (!skuSet.has(key)) return `系统里没有 ${key} 这个 SKU`;
@@ -48,7 +52,8 @@ export function createTools(agents: Agents, ctx: ToolCtx) {
   const lowStock = tool({
     name: "low_stock",
     description:
-      "列出低于安全库存（含断码）的 SKU，每条带齐 款号/颜色/尺码/当前库存/安全库存——可直接据此调 record_move 补货，不必再向用户索要色码。",
+      "列出低于安全库存（含断码=0）的 SKU；要补货 / 问『哪些快断货』时先调它。" +
+      "每条带齐 款号/颜色/尺码/当前库存/安全库存——这些就能直接喂给 record_move 补货，不必再向用户要色码。",
     parameters: z.object({}),
     execute: async () => {
       const sm = await stockMap();
@@ -63,7 +68,8 @@ export function createTools(agents: Agents, ctx: ToolCtx) {
 
   const reconSummary = tool({
     name: "recon_summary",
-    description: "盘点对账：账实差异的 AI 归因汇总（盘亏毛额、真损失、可追回、各成因分桶）",
+    description:
+      "盘点对账汇总：盘亏毛额、AI 归因后的真损失/可追回、各成因分桶。用户问『对得上账吗 / 差多少 / 差在哪』时用。",
     parameters: z.object({}),
     execute: async () => {
       const view = await loadStocktakeView();
@@ -85,15 +91,18 @@ export function createTools(agents: Agents, ctx: ToolCtx) {
   const recordMove = tool({
     name: "record_move",
     description:
-      "登记一笔入库(IN)或出库(OUT)，直接生成待复核单（不需要在对话里二次确认，审批闸会兜底）。" +
-      "qty 是这一笔的件数；『补货到 N 件』时 qty = N − 当前库存（当前库存用 low_stock / query_stock 查）。" +
-      "务必映射到目录里真实存在的 款号/颜色/尺码；一轮里可多次调用以完成多笔（例如把多个低库存 SKU 一次补齐）。",
+      "登记一笔入库(IN)或出库(OUT)，生成『待复核单』。审批后才入账，所以你可以直接登记、不必在对话里再让用户确认。" +
+      "一轮里可多次调用，把多笔（如多个低库存 SKU 的补货）一并登记。",
     parameters: z.object({
-      type: z.enum(["IN", "OUT"]),
-      styleNo: z.string(),
-      color: z.string(),
-      size: z.string(),
-      qty: z.number().int().positive(),
+      type: z.enum(["IN", "OUT"]).describe("IN=入库（加库存，如到货/补货），OUT=出库（减库存，如销售/调出）"),
+      styleNo: z.string().describe("款号，如 AW2024-3301"),
+      color: z.string().describe("颜色，去掉多余的『色』字，如 藏青 / 黑 / 米白"),
+      size: z.string().describe("尺码，取值 S / M / L / XL / 2XL"),
+      qty: z
+        .number()
+        .int()
+        .positive()
+        .describe("这一笔的件数（正整数）。补货到 N 件时填 N−当前库存（当前库存先用 low_stock / query_stock 查）"),
     }),
     execute: async ({ type, styleNo, color, size, qty }) => {
       const skuCode = `${styleNo}-${color}-${size}`;
