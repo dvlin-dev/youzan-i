@@ -6,23 +6,12 @@ import { allSkus } from "@/lib/db/queries";
 import type { SessionUser } from "@/lib/session";
 
 import { aiEnabled, getOpenAIClient } from "./client";
+import type { CopilotEvent } from "./copilot-stream";
 import { type RecordedMove, getToolSpecs } from "./tools";
 
 export { aiEnabled };
-
-/** 流式事件：前端据此实时渲染「思考 + 工具调用 + 回答」。 */
-export type CopilotEvent =
-  | { t: "thought"; delta: string }
-  | {
-      t: "tool";
-      id: string;
-      name?: string;
-      label?: string;
-      status: "running" | "done";
-    }
-  | { t: "text"; delta: string }
-  | { t: "final"; mutated: boolean; docs: string[]; text: string }
-  | { t: "error"; message: string };
+// 流式事件类型在共享纯模块定义（服务端产出 / 客户端消费同一份），此处转出以兼容既有引用。
+export type { CopilotEvent };
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 

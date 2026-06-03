@@ -3,23 +3,15 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 
+import {
+  type CopilotEvent,
+  type Msg,
+  makeLineSplitter,
+  reduceEvent,
+} from "@/lib/ai/copilot-stream";
 import type { Role } from "@/lib/constants";
 
 import { Icon } from "./icons";
-
-/** AI 消息按「时间顺序」由若干 part 组成：思考 / 工具 / 文本，依到达顺序追加。 */
-type Part =
-  | { kind: "thought"; text: string }
-  | { kind: "text"; text: string }
-  | { kind: "tool"; id: string; label: string; status: "running" | "done" };
-type Msg = {
-  role: "user" | "ai";
-  id: number;
-  text?: string;
-  parts: Part[];
-  docs?: string[];
-  streaming?: boolean;
-};
 
 const SUGG: Record<Role, string[]> = {
   warehouse: [
@@ -37,17 +29,6 @@ const SUGG: Record<Role, string[]> = {
     "AW2024-3301 藏青 M 入 30、黑 M 出 20",
     "帮我对一下账，差在哪",
   ],
-};
-
-const appendText = (
-  parts: Part[],
-  kind: "thought" | "text",
-  delta: string,
-): Part[] => {
-  const last = parts[parts.length - 1];
-  if (last && last.kind === kind)
-    return [...parts.slice(0, -1), { ...last, text: last.text + delta }];
-  return [...parts, { kind, text: delta } as Part];
 };
 
 export function Copilot({
@@ -91,93 +72,19 @@ export function Copilot({
       if (!res.body) throw new Error("no stream");
       const reader = res.body.getReader();
       const dec = new TextDecoder();
-      let buf = "";
+      const splitLines = makeLineSplitter();
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
-        buf += dec.decode(value, { stream: true });
-        let nl: number;
-        while ((nl = buf.indexOf("\n")) >= 0) {
-          const raw = buf.slice(0, nl).trim();
-          buf = buf.slice(nl + 1);
-          if (!raw) continue;
-          let ev: Record<string, unknown>;
+        for (const raw of splitLines(dec.decode(value, { stream: true }))) {
+          let ev: CopilotEvent;
           try {
-            ev = JSON.parse(raw);
+            ev = JSON.parse(raw) as CopilotEvent;
           } catch {
             continue;
           }
-          if (ev.t === "thought") {
-            patch(aid, (m) => ({
-              ...m,
-              parts: appendText(m.parts, "thought", ev.delta as string),
-            }));
-          } else if (ev.t === "text") {
-            patch(aid, (m) => ({
-              ...m,
-              parts: appendText(m.parts, "text", ev.delta as string),
-            }));
-          } else if (ev.t === "tool" && ev.status === "running") {
-            patch(aid, (m) =>
-              m.parts.some((p) => p.kind === "tool" && p.id === ev.id)
-                ? m
-                : {
-                    ...m,
-                    parts: [
-                      ...m.parts,
-                      {
-                        kind: "tool",
-                        id: ev.id as string,
-                        label:
-                          (ev.label as string) ?? (ev.name as string) ?? "工具",
-                        status: "running",
-                      },
-                    ],
-                  },
-            );
-          } else if (ev.t === "tool" && ev.status === "done") {
-            patch(aid, (m) => {
-              const hasId = m.parts.some(
-                (p) => p.kind === "tool" && p.id === ev.id,
-              );
-              let fb = false;
-              return {
-                ...m,
-                parts: m.parts.map((p) => {
-                  if (p.kind !== "tool") return p;
-                  if (hasId ? p.id === ev.id : !fb && p.status === "running") {
-                    fb = true;
-                    return { ...p, status: "done" };
-                  }
-                  return p;
-                }),
-              };
-            });
-          } else if (ev.t === "final") {
-            mutated = !!ev.mutated;
-            patch(aid, (m) => {
-              let parts = m.parts;
-              if (ev.text && !parts.some((p) => p.kind === "text"))
-                parts = [...parts, { kind: "text", text: ev.text as string }];
-              parts = parts.map((p) =>
-                p.kind === "tool" && p.status === "running"
-                  ? { ...p, status: "done" }
-                  : p,
-              );
-              return {
-                ...m,
-                parts,
-                docs: ev.docs as string[],
-                streaming: false,
-              };
-            });
-          } else if (ev.t === "error") {
-            patch(aid, (m) => ({
-              ...m,
-              parts: [...m.parts, { kind: "text", text: ev.message as string }],
-              streaming: false,
-            }));
-          }
+          if (ev.t === "final") mutated = !!ev.mutated;
+          patch(aid, (m) => reduceEvent(m, ev));
         }
       }
     } catch {

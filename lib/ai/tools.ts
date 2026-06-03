@@ -187,50 +187,37 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
     }),
     execute: async (a) => {
       const raw = String(a.sql ?? "");
-      if (!readonlyEnabled(role)) {
+      // 绑定发起人/角色的审计闭包：留痕字段（谁查的）只写一处，杜绝新增分支漏记或拼错。
+      const audit = (
+        rest: Omit<
+          Parameters<typeof auditSqlQuery>[0],
+          "actorId" | "actorName" | "role"
+        >,
+      ) =>
         auditSqlQuery({
           actorId: actor.id,
           actorName: actor.name,
           role,
-          sql: raw,
-          outcome: "disabled",
+          ...rest,
         });
+
+      if (!readonlyEnabled(role)) {
+        audit({ sql: raw, outcome: "disabled" });
         return "只读 SQL 暂不可用：系统未配置只读数据库角色（DATABASE_URL_READONLY）。请改用其它工具，或让管理员开启。";
       }
       const guard = guardReadonlySql(raw, role);
       if (!guard.ok) {
-        auditSqlQuery({
-          actorId: actor.id,
-          actorName: actor.name,
-          role,
-          sql: raw,
-          outcome: "rejected",
-          reason: guard.reason,
-        });
+        audit({ sql: raw, outcome: "rejected", reason: guard.reason });
         return `已拒绝该 SQL：${guard.reason}`;
       }
       try {
         const { rows, truncated } = await runReadonlyQuery(guard.sql, role);
         const safe = maskOutputColumns(rows, role);
-        auditSqlQuery({
-          actorId: actor.id,
-          actorName: actor.name,
-          role,
-          sql: guard.sql,
-          outcome: "ok",
-          rowCount: safe.length,
-        });
+        audit({ sql: guard.sql, outcome: "ok", rowCount: safe.length });
         return formatRows(safe, truncated);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        auditSqlQuery({
-          actorId: actor.id,
-          actorName: actor.name,
-          role,
-          sql: guard.sql,
-          outcome: "error",
-          reason: msg,
-        });
+        audit({ sql: guard.sql, outcome: "error", reason: msg });
         const hint = /more than once|duplicate/i.test(msg)
           ? "（多列同名，请用 AS 给列取别名）"
           : "";

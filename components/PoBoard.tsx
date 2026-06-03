@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { type CSSProperties, useState } from "react";
 
 import { receivePO } from "@/lib/actions";
 import { yuan } from "@/lib/money";
@@ -31,6 +31,44 @@ const pillClass = (s: string) =>
       : s === "部分到货"
         ? "warn"
         : "info";
+
+/** 到货进度条（轨道 + 填充）。两处复用：列表行（满进度转绿）与抽屉（始终主色）。 */
+function ProgressBar({
+  pct,
+  height,
+  radius,
+  successAt100 = false,
+  style,
+}: {
+  pct: number;
+  height: number;
+  radius: number;
+  successAt100?: boolean;
+  style?: CSSProperties;
+}) {
+  return (
+    <div
+      style={{
+        height,
+        borderRadius: radius,
+        background: "var(--surface-2)",
+        overflow: "hidden",
+        ...style,
+      }}
+    >
+      <div
+        style={{
+          width: pct + "%",
+          height: "100%",
+          background:
+            successAt100 && pct === 100
+              ? "var(--success)"
+              : "var(--primary-600)",
+        }}
+      />
+    </div>
+  );
+}
 
 export function PoBoard({ pos, canCost }: { pos: Po[]; canCost: boolean }) {
   const [sel, setSel] = useState<Po | null>(null);
@@ -94,26 +132,13 @@ export function PoBoard({ pos, canCost }: { pos: Po[]; canCost: boolean }) {
                         justifyContent: "flex-end",
                       }}
                     >
-                      <div
-                        style={{
-                          width: 70,
-                          height: 6,
-                          borderRadius: 4,
-                          background: "var(--surface-2)",
-                          overflow: "hidden",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: pct + "%",
-                            height: "100%",
-                            background:
-                              pct === 100
-                                ? "var(--success)"
-                                : "var(--primary-600)",
-                          }}
-                        />
-                      </div>
+                      <ProgressBar
+                        pct={pct}
+                        height={6}
+                        radius={4}
+                        successAt100
+                        style={{ width: 70 }}
+                      />
                       <span className="tnum dim" style={{ fontSize: 12 }}>
                         {rec}/{ord}
                       </span>
@@ -153,6 +178,34 @@ function PoDrawer({
   const idx = FLOW.indexOf(po.status === "已取消" ? "草稿" : po.status);
   const ord = po.lines.reduce((a, l) => a + l.ordered, 0);
   const rec = po.lines.reduce((a, l) => a + l.received, 0);
+
+  // 页脚：已有待复核到货单 → 提示；可收货状态 → 登记按钮；否则不显示。早返回，不堆三元。
+  function renderFooter() {
+    if (po.pendingReceive) {
+      return (
+        <div
+          className="hitl"
+          style={{ borderRadius: 9, marginTop: 16, borderTop: "none" }}
+        >
+          <Icon name="clock" size={13} />{" "}
+          已有到货单待复核——复核入账后才更新到货进度
+        </div>
+      );
+    }
+    if (["已下单", "部分到货"].includes(po.status)) {
+      return (
+        <button
+          className="btn primary"
+          style={{ width: "100%", marginTop: 16, justifyContent: "center" }}
+          onClick={() => onReceive(po.poNo)}
+        >
+          <Icon name="in" size={15} /> 登记到货（生成入库单 · 待复核）
+        </button>
+      );
+    }
+    return null;
+  }
+
   return (
     <>
       <div className="scrim" onClick={onClose} />
@@ -203,23 +256,12 @@ function PoDrawer({
                 {rec} / {ord} 件
               </b>
             </div>
-            <div
-              style={{
-                height: 8,
-                borderRadius: 5,
-                background: "var(--surface-2)",
-                overflow: "hidden",
-                marginTop: 8,
-              }}
-            >
-              <div
-                style={{
-                  width: (ord ? Math.round((rec / ord) * 100) : 0) + "%",
-                  height: "100%",
-                  background: "var(--primary-600)",
-                }}
-              />
-            </div>
+            <ProgressBar
+              pct={ord ? Math.round((rec / ord) * 100) : 0}
+              height={8}
+              radius={5}
+              style={{ marginTop: 8 }}
+            />
           </div>
           <h2 className="sec" style={{ marginTop: 18 }}>
             采购明细
@@ -244,29 +286,7 @@ function PoDrawer({
               ))}
             </tbody>
           </table>
-          {po.pendingReceive ? (
-            <div
-              className="hitl"
-              style={{ borderRadius: 9, marginTop: 16, borderTop: "none" }}
-            >
-              <Icon name="clock" size={13} />{" "}
-              已有到货单待复核——复核入账后才更新到货进度
-            </div>
-          ) : (
-            ["已下单", "部分到货"].includes(po.status) && (
-              <button
-                className="btn primary"
-                style={{
-                  width: "100%",
-                  marginTop: 16,
-                  justifyContent: "center",
-                }}
-                onClick={() => onReceive(po.poNo)}
-              >
-                <Icon name="in" size={15} /> 登记到货（生成入库单 · 待复核）
-              </button>
-            )
-          )}
+          {renderFooter()}
         </div>
       </aside>
     </>
