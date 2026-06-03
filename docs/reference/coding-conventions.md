@@ -41,8 +41,9 @@
 ## 验证基线
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test && pnpm build
-# 工具链就绪后再加：pnpm format:check && pnpm audit（0 漏洞）
+pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build
 ```
 
-库存守恒（I1/I2）与 6 类归因检测器、AI 安全边界（RBAC 越权 / query_sql 守门）必须有单测常驻（`tests/*`）；只读连接层集成用 `pnpm test:integration`；UI 变更人工确认关键界面（agent-browser / 浏览器）。
+- **依赖安全**：`pnpm audit` 目标 0 漏洞。当前有 3 个经 `next → postcss` 的传递性告警（含 1 high），随 Next 升级清理；暂未作为硬门禁，但新增**直接依赖**不得带漏洞。
+- 库存守恒（I1/I2）与 6 类归因检测器、AI 安全边界（RBAC 越权 / query_sql 守门）必须有单测常驻（`tests/*`）；只读连接层集成用 `pnpm test:integration`。
+- UI 变更人工确认关键界面（agent-browser / 浏览器）。
