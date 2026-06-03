@@ -1,14 +1,14 @@
-# 编码与协作规范
+# 协作与上线规范
 
-> 跨需求复用的编码约定与协作流程。技术栈 / 目录结构 / 不变量的**架构事实**见
-> [../design/tech-stack.md](../design/tech-stack.md) 与 [../design/domain-model.md](../design/domain-model.md)；根 `CLAUDE.md` 为硬约束总纲。
+> 协作流程 + 上线门禁 + 本项目特定编码约定。通用工程规则（代码原则 / 命名 / TS / React / 样式 / lint）见
+> [engineering-standards.md](./engineering-standards.md)；架构事实见 [../design/tech-stack.md](../design/tech-stack.md) 与 [../design/domain-model.md](../design/domain-model.md)；根 `CLAUDE.md` 为硬约束总纲。
 
-## 编码约定
+## 本项目特定编码约定
 
 - **金额整数分**：统一 `cents` 存储与计算，仅展示层 `/100`；合计 = 逐单求和、逐分对齐。
 - **可预期错误结构化返回**：返回 `{ ok, msg }` 之类结构，不靠抛异常做流程控制；不变量违例 → 告警 + 阻断。
-- **命名**：文件小写中划线，变量 camelCase，类型 PascalCase；接口不加 `I` 前缀。**布尔变量 / 参数（新代码）用 `is/should/has/can/did/will/was` 前缀**（如 `isLow`、`hasCost`）——存量按 lint 渐进，不强制大改名。
-- **先读现状再改**：优先复用已有类型 / 工具 / helper；模块化、单一职责，但不为当前体量过度设计、不留兼容包袱。
+- **先读现状再改**：优先复用已有类型 / 工具 / helper。
+- 通用代码原则 / 命名 / TS / React / 样式 / lint 规则统一见 [engineering-standards.md](./engineering-standards.md)。
 
 ## 协作
 
