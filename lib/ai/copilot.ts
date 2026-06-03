@@ -10,7 +10,7 @@ export { aiEnabled };
 /** 流式事件：前端据此实时渲染「思考 + 工具调用 + 回答」。 */
 export type CopilotEvent =
   | { t: "thought"; delta: string }
-  | { t: "tool"; id: string; name?: string; label?: string; icon?: string; status: "running" | "done" }
+  | { t: "tool"; id: string; name?: string; label?: string; status: "running" | "done" }
   | { t: "text"; delta: string }
   | { t: "final"; mutated: boolean; docs: string[]; text: string }
   | { t: "error"; message: string };
@@ -34,22 +34,6 @@ function toolLabel(name: string, args: Record<string, unknown>): string {
     }
     default:
       return name;
-  }
-}
-
-/** 工具图标（前端 Icon name）。 */
-function toolIcon(name: string, args: Record<string, unknown>): string {
-  switch (name) {
-    case "query_stock":
-      return "search";
-    case "low_stock":
-      return "alert";
-    case "recon_summary":
-      return "scale";
-    case "record_move":
-      return args.type === "OUT" ? "out" : "in";
-    default:
-      return "tool";
   }
 }
 
@@ -220,7 +204,7 @@ export async function* streamCopilot(message: string, role: Role): AsyncGenerato
           return { c, a };
         });
         // 先全部显示「进行中」，再逐个执行并标记完成
-        for (const { c, a } of parsed) yield { t: "tool", id: c.id, name: c.name, label: toolLabel(c.name, a), icon: toolIcon(c.name, a), status: "running" };
+        for (const { c, a } of parsed) yield { t: "tool", id: c.id, name: c.name, label: toolLabel(c.name, a), status: "running" };
         for (const { c, a } of parsed) {
           const spec = byName.get(c.name);
           let out: string;

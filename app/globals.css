@@ -1004,109 +1004,44 @@ h2.sec {
   color: var(--text);
 }
 
-/* 过程区：思考（可折叠）+ 工具调用时间线 */
-.cop-trace {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  padding: 9px 11px;
-  margin-bottom: 11px;
-}
-.cop-think > summary {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  color: var(--text-2);
-  font-weight: 600;
-  font-size: 12px;
-  list-style: none;
-  user-select: none;
-}
-.cop-think > summary::-webkit-details-marker {
-  display: none;
-}
-.cop-think > summary .caret {
-  margin-left: auto;
+/* 过程按时间顺序「平铺」展示——无外框、无图标，思考/工具/文本依次出现 */
+.cop-thought {
+  font-size: 12.5px;
+  line-height: 1.6;
   color: var(--text-3);
-  display: inline-flex;
-  transition: transform 0.2s;
-}
-.cop-think[open] > summary .caret {
-  transform: rotate(90deg);
-}
-.cop-think .cop-think-body {
-  margin-top: 7px;
-  padding: 8px 11px;
-  border-left: 2px solid var(--primary-600);
-  background: var(--surface);
-  border-radius: 0 8px 8px 0;
-  white-space: pre-wrap;
   font-style: italic;
-  line-height: 1.55;
-  color: var(--text-3);
-  font-size: 12px;
-  max-height: 260px;
-  overflow: auto;
+  white-space: pre-wrap;
+  margin: 1px 0 7px;
 }
-.cop-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.cop-step {
+.cop-tool {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   font-size: 12.5px;
   color: var(--text-2);
-  padding: 2px 0;
+  padding: 3px 0;
 }
-.cop-step.done {
+.cop-tool.done {
   color: var(--text-3);
 }
-.cop-step .chip {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text-3);
-  flex: none;
-}
-.cop-step.running .chip {
-  color: var(--primary-600);
-  border-color: var(--primary-600);
-  background: var(--primary-weak);
-}
-.cop-step.done .chip {
-  color: var(--success);
-}
-.cop-step .lb {
+.cop-tool .lb {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.cop-step .st {
+.cop-tool .st {
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   display: grid;
   place-items: center;
-}
-.cop-step.done .st {
   color: var(--success);
 }
+.cop-loading {
+  padding: 4px 0 2px;
+}
 .spin {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   border: 2px solid var(--border);
   border-top-color: var(--primary-600);
   border-radius: 50%;
@@ -1121,6 +1056,7 @@ h2.sec {
 .cop-answer {
   white-space: pre-wrap;
   line-height: 1.6;
+  margin: 1px 0;
 }
 .toolcard {
   margin-top: 10px;

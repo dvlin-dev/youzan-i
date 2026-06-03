@@ -4,21 +4,30 @@ import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
 import type { Role } from "@/lib/constants";
 
-type Step = { id: string; label: string; status: "running" | "done"; name?: string; icon?: string };
-type Msg = {
-  role: "user" | "ai";
-  id: number;
-  text?: string;
-  thought?: string;
-  steps?: Step[];
-  docs?: string[];
-  streaming?: boolean;
-};
+/** AI 消息按「时间顺序」由若干 part 组成：思考 / 工具 / 文本，依到达顺序追加。 */
+type Part =
+  | { kind: "thought"; text: string }
+  | { kind: "text"; text: string }
+  | { kind: "tool"; id: string; label: string; status: "running" | "done" };
+type Msg = { role: "user" | "ai"; id: number; text?: string; parts: Part[]; docs?: string[]; streaming?: boolean };
 
 const SUGG: Record<Role, string[]> = {
   warehouse: ["AW2024-3301 藏青/黑/米白 M 各入 50 件", "黑色 L 卫衣 出 24 件", "哪些 SKU 快断货了？"],
   buyer: ["帮我对一下账，差在哪", "哪些 SKU 快断货了？", "查 AW2024-9902 卡其 L 库存"],
   admin: ["看看哪些快断货了，都补到 30", "AW2024-3301 藏青 M 入 30、黑 M 出 20", "帮我对一下账，差在哪"],
+};
+
+/** 极简富文本：把 **加粗** 渲染为 <strong>，其余按纯文本（换行由 pre-wrap 处理）。 */
+function renderRich(text: string) {
+  return text.split(/(\*\*[^*\n]+\*\*)/g).map((p, i) =>
+    p.startsWith("**") && p.endsWith("**") ? <strong key={i}>{p.slice(2, -2)}</strong> : p,
+  );
+}
+
+const appendText = (parts: Part[], kind: "thought" | "text", delta: string): Part[] => {
+  const last = parts[parts.length - 1];
+  if (last && last.kind === kind) return [...parts.slice(0, -1), { ...last, text: last.text + delta }];
+  return [...parts, { kind, text: delta } as Part];
 };
 
 export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) {
@@ -32,14 +41,13 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
     bodyRef.current?.scrollTo(0, 1e9);
   }, [msgs, busy]);
 
-  const patch = (id: number, fn: (m: Msg) => Msg) =>
-    setMsgs((ms) => ms.map((m) => (m.id === id ? fn(m) : m)));
+  const patch = (id: number, fn: (m: Msg) => Msg) => setMsgs((ms) => ms.map((m) => (m.id === id ? fn(m) : m)));
 
   async function send(text: string) {
     if (!text.trim() || busy) return;
     const uid = ++idRef.current;
     const aid = ++idRef.current;
-    setMsgs((m) => [...m, { role: "user", id: uid, text }, { role: "ai", id: aid, steps: [], text: "", streaming: true }]);
+    setMsgs((m) => [...m, { role: "user", id: uid, text, parts: [] }, { role: "ai", id: aid, parts: [], streaming: true }]);
     setInput("");
     setBusy(true);
     let mutated = false;
@@ -69,47 +77,46 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
             continue;
           }
           if (ev.t === "thought") {
-            patch(aid, (m) => ({ ...m, thought: (m.thought ?? "") + (ev.delta as string) }));
+            patch(aid, (m) => ({ ...m, parts: appendText(m.parts, "thought", ev.delta as string) }));
           } else if (ev.t === "text") {
-            patch(aid, (m) => ({ ...m, text: (m.text ?? "") + (ev.delta as string) }));
+            patch(aid, (m) => ({ ...m, parts: appendText(m.parts, "text", ev.delta as string) }));
           } else if (ev.t === "tool" && ev.status === "running") {
-            patch(aid, (m) => {
-              const steps = m.steps ?? [];
-              if (steps.some((s) => s.id === ev.id)) return m;
-              return { ...m, steps: [...steps, { id: ev.id as string, label: (ev.label as string) ?? (ev.name as string) ?? "工具", status: "running", name: ev.name as string, icon: ev.icon as string }] };
-            });
+            patch(aid, (m) =>
+              m.parts.some((p) => p.kind === "tool" && p.id === ev.id)
+                ? m
+                : { ...m, parts: [...m.parts, { kind: "tool", id: ev.id as string, label: (ev.label as string) ?? (ev.name as string) ?? "工具", status: "running" }] },
+            );
           } else if (ev.t === "tool" && ev.status === "done") {
             patch(aid, (m) => {
-              const steps = m.steps ?? [];
-              const hasId = steps.some((s) => s.id === ev.id);
+              const hasId = m.parts.some((p) => p.kind === "tool" && p.id === ev.id);
               let fb = false;
               return {
                 ...m,
-                steps: steps.map((s) => {
-                  if (hasId ? s.id === ev.id : !fb && s.status === "running") {
+                parts: m.parts.map((p) => {
+                  if (p.kind !== "tool") return p;
+                  if (hasId ? p.id === ev.id : !fb && p.status === "running") {
                     fb = true;
-                    return { ...s, status: "done" as const };
+                    return { ...p, status: "done" };
                   }
-                  return s;
+                  return p;
                 }),
               };
             });
           } else if (ev.t === "final") {
             mutated = !!ev.mutated;
-            patch(aid, (m) => ({
-              ...m,
-              text: m.text || (ev.text as string),
-              docs: ev.docs as string[],
-              streaming: false,
-              steps: (m.steps ?? []).map((s) => ({ ...s, status: "done" as const })),
-            }));
+            patch(aid, (m) => {
+              let parts = m.parts;
+              if (ev.text && !parts.some((p) => p.kind === "text")) parts = [...parts, { kind: "text", text: ev.text as string }];
+              parts = parts.map((p) => (p.kind === "tool" && p.status === "running" ? { ...p, status: "done" } : p));
+              return { ...m, parts, docs: ev.docs as string[], streaming: false };
+            });
           } else if (ev.t === "error") {
-            patch(aid, (m) => ({ ...m, text: ev.message as string, streaming: false }));
+            patch(aid, (m) => ({ ...m, parts: [...m.parts, { kind: "text", text: ev.message as string }], streaming: false }));
           }
         }
       }
     } catch {
-      patch(aid, (m) => ({ ...m, text: "网络出错，请重试。", streaming: false }));
+      patch(aid, (m) => ({ ...m, parts: [...m.parts, { kind: "text", text: "网络出错，请重试。" }], streaming: false }));
     }
     patch(aid, (m) => ({ ...m, streaming: false }));
     setBusy(false);
@@ -154,8 +161,26 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
               </div>
             ) : (
               <div key={m.id} className="msg ai">
-                <Trace m={m} />
-                {m.text && <div className="cop-answer">{renderRich(m.text)}</div>}
+                {m.parts.map((p, i) => {
+                  if (p.kind === "thought") return <div key={i} className="cop-thought">{p.text}</div>;
+                  if (p.kind === "tool")
+                    return (
+                      <div key={p.id} className={"cop-tool " + p.status}>
+                        <span className="lb">{p.label}</span>
+                        <span className="st">{p.status === "running" ? <span className="spin" /> : <Icon name="check" size={13} />}</span>
+                      </div>
+                    );
+                  return (
+                    <div key={i} className="cop-answer">
+                      {renderRich(p.text)}
+                    </div>
+                  );
+                })}
+                {m.streaming && !m.parts.some((p) => p.kind === "tool" && p.status === "running") && (
+                  <div className="cop-loading">
+                    <span className="spin" />
+                  </div>
+                )}
                 {m.docs && m.docs.length > 0 && (
                   <div className="tc-actions" style={{ marginTop: 10 }}>
                     <button className="btn primary sm" onClick={goReview}>
@@ -196,57 +221,5 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
         </div>
       </aside>
     </>
-  );
-}
-
-/** 极简富文本：把 **加粗** 渲染为 <strong>，其余按纯文本（换行由 pre-wrap 处理）。 */
-function renderRich(text: string) {
-  return text.split(/(\*\*[^*\n]+\*\*)/g).map((p, i) =>
-    p.startsWith("**") && p.endsWith("**") ? <strong key={i}>{p.slice(2, -2)}</strong> : p,
-  );
-}
-
-/** 过程区：思考（可折叠）+ 工具调用时间线。 */
-function Trace({ m }: { m: Msg }) {
-  const steps = m.steps ?? [];
-  const thinking = !!m.streaming && !m.text; // 仍在朝答案推进
-  const hasThought = !!m.thought;
-  if (!steps.length && !hasThought && !thinking) return null;
-  return (
-    <div className="cop-trace">
-      {hasThought && (
-        <details className="cop-think" open={thinking ? true : undefined}>
-          <summary>
-            {thinking ? <span className="spin" /> : <Icon name="spark" size={13} />}
-            <span>{thinking ? "思考中…" : "已深度思考"}</span>
-            <span className="caret">
-              <Icon name="chev" size={13} />
-            </span>
-          </summary>
-          <div className="cop-think-body">{m.thought}</div>
-        </details>
-      )}
-      {thinking && !hasThought && !steps.length && (
-        <div className="cop-step running">
-          <span className="chip"><span className="spin" /></span>
-          <span className="lb">思考中…</span>
-        </div>
-      )}
-      {steps.length > 0 && (
-        <div className="cop-steps">
-          {steps.map((s) => (
-            <div className={"cop-step " + s.status} key={s.id}>
-              <span className="chip">
-                <Icon name={s.icon || "tool"} size={13} />
-              </span>
-              <span className="lb">{s.label}</span>
-              <span className="st">
-                {s.status === "running" ? <span className="spin" /> : <Icon name="check" size={13} />}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
