@@ -44,3 +44,20 @@
 - **提示注入**：备注 / OCR 文本里的注入指令不得变成真实工具调用。
 - **守恒不被绕过**：AI 任何路径都不能产生违反 I1/I2 的库存。
 - **诚实兜底**：规则不命中时归因必须给"无解释 + 建议核查"，不得编造原因。
+
+## 自动化覆盖现状（诚实标注）
+
+> "可回归"以实际跑得起来的测试为准。下表标明每条已自动化到哪、还靠人工。
+
+| 项 | 自动化 | 测试文件 |
+| --- | --- | --- |
+| 守恒 I2 / 红冲留痕（RC-08 数学核心） | ✅ 单测 | `tests/stock-math.test.ts` |
+| RC-08 全表守恒（无负库存，线上真实数据只读校验） | ✅ 集成（gated） | `tests/query-sql.integration.test.ts` |
+| RC-06 + 越权红线（策略层 `can.*`、工具按角色挂载） | ✅ 单测 | `tests/rbac.test.ts`、`tests/tools.test.ts` |
+| AI 归因准确率（6 桶命中）+ 诚实兜底 | ✅ 单测 | `tests/attribution.test.ts` |
+| query_sql 越权/注入/脱敏红线（语句层 + 输出脱敏 + 审计 + 连接层物理拒写 + DB 脱敏） | ✅ 单测 + 集成 | `tests/sql-guard.test.ts`、`tests/tools.test.ts`、`tests/query-sql.integration.test.ts` |
+| RC-01/03/04/05/07/09（**写库**的出入库 / 采购状态机 / 并发护栏 / 单人审批端到端） | ⏳ 人工（agent-browser 已实测）；自动化待一次性测试库（Neon 分支） | — |
+
+- `pnpm test`：纯单测（快、无网络）；集成组无 env 时自动 `skip`。
+- `pnpm test:integration`：跑 `query-sql.integration`（需 `DATABASE_URL_READONLY[_WH]`，只读不写、对线上库安全）。
+- mutating 主链路的自动化阻塞在「需一个可写脏的测试库」——直接写线上不可变流水会污染演示数据，故暂以 agent-browser 人工回归（见项目记忆）。补 Neon 分支后可把 RC-01/03/04/05/07/09 也自动化。

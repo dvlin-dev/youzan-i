@@ -5,4 +5,4 @@
 | 计划 | 状态 |
 | --- | --- |
 | [2026-06-02-production-nextjs-vercel.md](./2026-06-02-production-nextjs-vercel.md) | 已落地 — 原型 → Next.js + Postgres + Vercel 生产化、一键部署 |
-| [2026-06-03-readonly-sql-tool.md](./2026-06-03-readonly-sql-tool.md) | 规划中 — 只读 SQL 工具（query_sql）：灵活查任意数据 + 只读不写 |
+| [2026-06-03-readonly-sql-tool.md](./2026-06-03-readonly-sql-tool.md) | 已落地 — 只读 SQL 工具（query_sql）：三层防御 + 双只读角色 DB 层脱敏，已部署线上 |
