@@ -1,4 +1,5 @@
 import { Icon } from "@/components/icons";
+import { DEMO_MODE } from "@/lib/constants";
 
 import type { Pend } from "../types";
 
@@ -66,7 +67,8 @@ export function PendingReviewCard({
         <Icon name="shield" size={13} />
         <span>
           改变库存的动作先进<b>待复核</b>、<b>审批</b>
-          后才入账（任何人可审批，含录入人本人）；入账有守恒护栏不让库存为负——这正是治&ldquo;盘点差三万&rdquo;的根因。
+          后才入账（任何人可审批，含录入人本人）；入账有守恒护栏不让库存为负——这正是治
+          {DEMO_MODE ? "“盘点差三万”" : "错账"}的根因。
         </span>
       </div>
       {pending.length === 0 && (

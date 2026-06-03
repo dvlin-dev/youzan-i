@@ -1,4 +1,5 @@
 import { Icon } from "@/components/icons";
+import { DEMO_MODE } from "@/lib/constants";
 import { yuan } from "@/lib/money";
 
 import { BUCKETS, type Summary } from "../types";
@@ -11,9 +12,11 @@ export function CauseSummary({ summary }: { summary: Summary }) {
         <div className="ss">
           <div className="k">盘亏毛额（账面看着差这么多）</div>
           <div className="v neg tnum">{yuan(summary.loss)}</div>
-          <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
-            ≈ 客户说的&ldquo;差了三万多&rdquo;
-          </div>
+          {DEMO_MODE && (
+            <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>
+              ≈ 客户说的&ldquo;差了三万多&rdquo;
+            </div>
+          )}
         </div>
         <div className="ss">
           <div className="k">AI 归因后 · 真实物净损失</div>
@@ -71,7 +74,7 @@ export function CauseSummary({ summary }: { summary: Summary }) {
             <Icon name="spark" size={18} />
           </span>
           <div>
-            <b>AI 把&ldquo;差三万&rdquo;拆成了可执行的几摞：</b>
+            <b>AI 把{DEMO_MODE ? "“差三万”" : "差异"}拆成了可执行的几摞：</b>
             <div style={{ marginTop: 7 }}>
               {BUCKETS.map(([b, label, tone]) => {
                 const v = summary.buckets[b];

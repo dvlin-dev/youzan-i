@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { Icon } from "@/components/icons";
-import { ROLE_LABEL, type Role } from "@/lib/constants";
+import { DEMO_MODE, ROLE_LABEL, type Role } from "@/lib/constants";
 import type { SessionUser } from "@/lib/session";
 
 import type { NavItem } from "../types";
@@ -34,7 +34,7 @@ export function Sidebar({
         </span>
         <div>
           <div className="name">云链进销存</div>
-          <div className="sub">服装批发 · Demo</div>
+          <div className="sub">服装批发{DEMO_MODE ? " · Demo" : ""}</div>
         </div>
       </div>
       <div className="nav-label">主菜单</div>
@@ -55,20 +55,24 @@ export function Sidebar({
 
       <div className="sb-spacer" />
       <div className="userbox">
-        <div className="nav-label" style={{ padding: "0 4px 8px" }}>
-          切换演示角色
-        </div>
-        <div className="roles">
-          {(["warehouse", "buyer", "admin"] as Role[]).map((r) => (
-            <button
-              key={r}
-              className={"role-btn" + (user.role === r ? " active" : "")}
-              onClick={() => onSwitchRole(r)}
-            >
-              {ROLE_LABEL[r]}
-            </button>
-          ))}
-        </div>
+        {DEMO_MODE && (
+          <>
+            <div className="nav-label" style={{ padding: "0 4px 8px" }}>
+              切换演示角色
+            </div>
+            <div className="roles">
+              {(["warehouse", "buyer", "admin"] as Role[]).map((r) => (
+                <button
+                  key={r}
+                  className={"role-btn" + (user.role === r ? " active" : "")}
+                  onClick={() => onSwitchRole(r)}
+                >
+                  {ROLE_LABEL[r]}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <div className="me">
           <span className="avatar">{user.name.slice(0, 1)}</span>
           <div className="info">

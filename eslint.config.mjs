@@ -38,9 +38,14 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // console 是审计 sink 与 CLI 脚本的正当输出口，放行这几处。
+  // console 是审计 sink / CLI 脚本 / 服务端动作错误日志的正当输出口，放行这几处。
   {
-    files: ["lib/db/seed.ts", "lib/db/setup-readonly.ts", "lib/ai/audit.ts"],
+    files: [
+      "lib/db/seed.ts",
+      "lib/db/setup-readonly.ts",
+      "lib/ai/audit.ts",
+      "lib/actions.ts",
+    ],
     rules: { "no-console": "off" },
   },
 ]);

@@ -7,7 +7,7 @@ import { z } from "zod";
 import { aiEnabled } from "./ai/client";
 import { explainAttribution } from "./ai/explain";
 import { signIn, signOut } from "./auth";
-import { DEMO_USERS, type Role, can } from "./constants";
+import { DEMO_MODE, DEMO_USERS, type Role, can } from "./constants";
 import { db } from "./db/client";
 import {
   deleteDraft,
@@ -33,6 +33,20 @@ import { loadStocktakeView } from "./stocktake/engine";
 
 type Result = { ok: boolean; msg: string; docNo?: string };
 
+/**
+ * 写动作统一兜底：把 DB 等异常归一成可读 Result，避免客户端 `await action()` 直接 throw
+ * （表现为「点了没反应 / 页面崩」）。NEXT_REDIRECT 透传不拦。
+ */
+async function tryResult(fn: () => Promise<Result>): Promise<Result> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (isRedirect(e)) throw e;
+    console.error("[action] 失败：", e);
+    return { ok: false, msg: "操作失败，请稍后重试" };
+  }
+}
+
 function ymd(d = new Date()) {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
@@ -56,33 +70,35 @@ export type MoveInput = z.infer<typeof MoveInput>;
 
 /** 出入库：生成待复核流水（不直接入账）。出库不为负（守恒）。 */
 export async function submitMove(raw: MoveInput): Promise<Result> {
-  const u = await requireUser();
-  if (!can.move(u.role))
-    return { ok: false, msg: "无权录入出入库（数据层拦截）" };
-  const input = MoveInput.parse(raw);
-  if (input.type === "OUT") {
-    const sm = await stockMap();
-    const bad = input.entries.find((e) => e.qty > (sm[e.skuCode] ?? 0));
-    if (bad)
-      return {
-        ok: false,
-        msg: `${bad.skuCode} 当前仅 ${sm[bad.skuCode] ?? 0} 件，出库 ${bad.qty} 件会导致负库存（已拦截）`,
-      };
-  }
-  const doc = docNo(input.type);
-  await insertDraft(
-    input.entries.map((e) => ({
-      skuCode: e.skuCode,
-      delta: input.type === "IN" ? e.qty : -e.qty,
-      bizType: input.type === "IN" ? "采购到货" : "销售出库",
-      docNo: doc,
-      operatorId: u.name,
-      scanned: true,
-    })),
-  );
-  revalidateAll();
-  const sum = input.entries.reduce((a, e) => a + e.qty, 0);
-  return { ok: true, msg: `已提交 ${doc} · ${sum} 件（待复核）`, docNo: doc };
+  return tryResult(async () => {
+    const u = await requireUser();
+    if (!can.move(u.role))
+      return { ok: false, msg: "无权录入出入库（数据层拦截）" };
+    const input = MoveInput.parse(raw);
+    if (input.type === "OUT") {
+      const sm = await stockMap();
+      const bad = input.entries.find((e) => e.qty > (sm[e.skuCode] ?? 0));
+      if (bad)
+        return {
+          ok: false,
+          msg: `${bad.skuCode} 当前仅 ${sm[bad.skuCode] ?? 0} 件，出库 ${bad.qty} 件会导致负库存（已拦截）`,
+        };
+    }
+    const doc = docNo(input.type);
+    await insertDraft(
+      input.entries.map((e) => ({
+        skuCode: e.skuCode,
+        delta: input.type === "IN" ? e.qty : -e.qty,
+        bizType: input.type === "IN" ? "采购到货" : "销售出库",
+        docNo: doc,
+        operatorId: u.name,
+        scanned: true,
+      })),
+    );
+    revalidateAll();
+    const sum = input.entries.reduce((a, e) => a + e.qty, 0);
+    return { ok: true, msg: `已提交 ${doc} · ${sum} 件（待复核）`, docNo: doc };
+  });
 }
 
 /**
@@ -91,45 +107,49 @@ export async function submitMove(raw: MoveInput): Promise<Result> {
  * 杜绝两张待复核出库单各自初检通过、审批后双双打穿库存。
  */
 export async function reviewDoc(doc: string): Promise<Result> {
-  const u = await requireUser();
-  if (!can.move(u.role)) return { ok: false, msg: "无权审批" };
-  const rows = await getDraft(doc);
-  if (!rows.length) return { ok: false, msg: "单据不存在或已处理" };
+  return tryResult(async () => {
+    const u = await requireUser();
+    if (!can.move(u.role)) return { ok: false, msg: "无权审批" };
+    const rows = await getDraft(doc);
+    if (!rows.length) return { ok: false, msg: "单据不存在或已处理" };
 
-  const posted = await postDraftAtomic(doc, u.name);
-  if (!posted.length) {
-    // 被守恒拦截：定位首个会打穿库存的 SKU，给出可读提示
-    const sm = await stockMap();
-    const need = new Map<string, number>();
-    for (const r of rows)
-      need.set(r.skuCode, (need.get(r.skuCode) ?? 0) + r.delta);
-    let msg = "复核未通过：库存守恒校验失败（请先驳回或调整）";
-    for (const [code, dlt] of need) {
-      if ((sm[code] ?? 0) + dlt < 0) {
-        msg = `${code} 当前 ${sm[code] ?? 0} 件，复核入账会导致负库存（守恒拦截）`;
-        break;
+    const posted = await postDraftAtomic(doc, u.name);
+    if (!posted.length) {
+      // 被守恒拦截：定位首个会打穿库存的 SKU，给出可读提示
+      const sm = await stockMap();
+      const need = new Map<string, number>();
+      for (const r of rows)
+        need.set(r.skuCode, (need.get(r.skuCode) ?? 0) + r.delta);
+      let msg = "复核未通过：库存守恒校验失败（请先驳回或调整）";
+      for (const [code, dlt] of need) {
+        if ((sm[code] ?? 0) + dlt < 0) {
+          msg = `${code} 当前 ${sm[code] ?? 0} 件，复核入账会导致负库存（守恒拦截）`;
+          break;
+        }
       }
+      return { ok: false, msg };
     }
-    return { ok: false, msg };
-  }
-  await deleteDraft(doc);
+    await deleteDraft(doc);
 
-  // 采购到货复核通过 → 推进采购单状态机（到货量由 posted 流水派生，单一真相）
-  const poRef = rows.find((r) => r.poRef)?.poRef;
-  if (poRef) await syncPoState(poRef);
+    // 采购到货复核通过 → 推进采购单状态机（到货量由 posted 流水派生，单一真相）
+    const poRef = rows.find((r) => r.poRef)?.poRef;
+    if (poRef) await syncPoState(poRef);
 
-  revalidateAll();
-  return { ok: true, msg: `${doc} 已复核入账` };
+    revalidateAll();
+    return { ok: true, msg: `${doc} 已复核入账` };
+  });
 }
 
 export async function rejectDoc(doc: string): Promise<Result> {
-  const u = await requireUser();
-  if (!can.move(u.role)) return { ok: false, msg: "无权操作" };
-  const rows = await getDraft(doc);
-  if (!rows.length) return { ok: false, msg: "单据不存在或已处理" };
-  await deleteDraft(doc);
-  revalidateAll();
-  return { ok: true, msg: `${doc} 已驳回（草稿删除，从未影响库存）` };
+  return tryResult(async () => {
+    const u = await requireUser();
+    if (!can.move(u.role)) return { ok: false, msg: "无权操作" };
+    const rows = await getDraft(doc);
+    if (!rows.length) return { ok: false, msg: "单据不存在或已处理" };
+    await deleteDraft(doc);
+    revalidateAll();
+    return { ok: true, msg: `${doc} 已驳回（草稿删除，从未影响库存）` };
+  });
 }
 
 /** 采购单状态机：到货量由 posted 流水派生回写，并据此推进状态（草稿/已下单 → 部分到货 → 已入库）。 */
@@ -160,35 +180,37 @@ async function syncPoState(poNo: string) {
  * 到货只有在复核入账后才作数——这样被驳回的到货不会留下「已入库却没货」的错账。
  */
 export async function receivePO(poNo: string): Promise<Result> {
-  const u = await requireUser();
-  if (!can.po(u.role)) return { ok: false, msg: "无权操作采购单" };
-  const po = await getPo(poNo);
-  if (!po) return { ok: false, msg: "采购单不存在" };
-  if (!["已下单", "部分到货"].includes(po.status))
-    return { ok: false, msg: "当前状态不可收货" };
-  if ((await getDraftsByPo(poNo)).length)
-    return { ok: false, msg: "该采购单已有待复核的到货单，请先复核或驳回" };
-  const doc = docNo("IN");
-  const rows = po.lines
-    .filter((l) => l.ordered - l.received > 0)
-    .map((l) => ({
-      skuCode: l.skuCode,
-      delta: l.ordered - l.received,
-      bizType: "采购到货",
+  return tryResult(async () => {
+    const u = await requireUser();
+    if (!can.po(u.role)) return { ok: false, msg: "无权操作采购单" };
+    const po = await getPo(poNo);
+    if (!po) return { ok: false, msg: "采购单不存在" };
+    if (!["已下单", "部分到货"].includes(po.status))
+      return { ok: false, msg: "当前状态不可收货" };
+    if ((await getDraftsByPo(poNo)).length)
+      return { ok: false, msg: "该采购单已有待复核的到货单，请先复核或驳回" };
+    const doc = docNo("IN");
+    const rows = po.lines
+      .filter((l) => l.ordered - l.received > 0)
+      .map((l) => ({
+        skuCode: l.skuCode,
+        delta: l.ordered - l.received,
+        bizType: "采购到货",
+        docNo: doc,
+        operatorId: u.name,
+        poRef: poNo,
+        qc: true,
+        scanned: true,
+      }));
+    if (!rows.length) return { ok: false, msg: "没有待收货明细" };
+    await insertDraft(rows);
+    revalidateAll();
+    return {
+      ok: true,
+      msg: `${poNo} 登记到货，生成 ${doc}（待复核，复核入账后才更新到货进度）`,
       docNo: doc,
-      operatorId: u.name,
-      poRef: poNo,
-      qc: true,
-      scanned: true,
-    }));
-  if (!rows.length) return { ok: false, msg: "没有待收货明细" };
-  await insertDraft(rows);
-  revalidateAll();
-  return {
-    ok: true,
-    msg: `${poNo} 登记到货，生成 ${doc}（待复核，复核入账后才更新到货进度）`,
-    docNo: doc,
-  };
+    };
+  });
 }
 
 /** 盘点过账：按归因追加盘盈/盘亏流水（串色成对），库存派生归零。仅老板。 */
@@ -235,59 +257,66 @@ async function postRows(
 }
 
 export async function adoptStocktakeRow(skuCode: string): Promise<Result> {
-  const u = await requireUser();
-  if (!can.postStocktake(u.role)) return { ok: false, msg: "仅老板可过账" };
-  const view = await loadStocktakeView();
-  if (!view) return { ok: false, msg: "无盘点单" };
-  const n = await postRows(
-    [skuCode],
-    u.name,
-    view.stocktake.pdNo,
-    view.stocktake.counter,
-  );
-  const left = await loadStocktakeView();
-  if (left && left.rows.every((r) => r.resolved))
-    await db
-      .update(stocktake)
-      .set({ status: "已过账" })
-      .where(eq(stocktake.pdNo, left.stocktake.pdNo));
-  revalidateAll();
-  return {
-    ok: n > 0,
-    msg: n > 0 ? `已采纳建议，生成 ${n} 笔调整流水（已复核）` : "无可处理项",
-  };
+  return tryResult(async () => {
+    const u = await requireUser();
+    if (!can.postStocktake(u.role)) return { ok: false, msg: "仅老板可过账" };
+    const view = await loadStocktakeView();
+    if (!view) return { ok: false, msg: "无盘点单" };
+    const n = await postRows(
+      [skuCode],
+      u.name,
+      view.stocktake.pdNo,
+      view.stocktake.counter,
+    );
+    const left = await loadStocktakeView();
+    if (left && left.rows.every((r) => r.resolved))
+      await db
+        .update(stocktake)
+        .set({ status: "已过账" })
+        .where(eq(stocktake.pdNo, left.stocktake.pdNo));
+    revalidateAll();
+    return {
+      ok: n > 0,
+      msg: n > 0 ? `已采纳建议，生成 ${n} 笔调整流水（已复核）` : "无可处理项",
+    };
+  });
 }
 
 export async function postAllStocktake(): Promise<Result> {
-  const u = await requireUser();
-  if (!can.postStocktake(u.role)) return { ok: false, msg: "仅老板可过账" };
-  const view = await loadStocktakeView();
-  if (!view) return { ok: false, msg: "无盘点单" };
-  const keys = view.rows.filter((r) => !r.resolved).map((r) => r.skuCode);
-  const n = await postRows(
-    keys,
-    u.name,
-    view.stocktake.pdNo,
-    view.stocktake.counter,
-  );
-  await db
-    .update(stocktake)
-    .set({ status: "已过账" })
-    .where(eq(stocktake.pdNo, view.stocktake.pdNo));
-  revalidateAll();
-  return {
-    ok: true,
-    msg: `盘点过账完成：${n} 个 SKU 已生成差异调整流水（老板审批）`,
-  };
+  return tryResult(async () => {
+    const u = await requireUser();
+    if (!can.postStocktake(u.role)) return { ok: false, msg: "仅老板可过账" };
+    const view = await loadStocktakeView();
+    if (!view) return { ok: false, msg: "无盘点单" };
+    const keys = view.rows.filter((r) => !r.resolved).map((r) => r.skuCode);
+    const n = await postRows(
+      keys,
+      u.name,
+      view.stocktake.pdNo,
+      view.stocktake.counter,
+    );
+    await db
+      .update(stocktake)
+      .set({ status: "已过账" })
+      .where(eq(stocktake.pdNo, view.stocktake.pdNo));
+    revalidateAll();
+    return {
+      ok: true,
+      msg: `盘点过账完成：${n} 个 SKU 已生成差异调整流水（老板审批）`,
+    };
+  });
 }
 
-/** 重置演示数据（老板）。 */
+/** 重置演示数据（老板，仅演示模式）。 */
 export async function resetDemo(): Promise<Result> {
-  const u = await requireUser();
-  if (u.role !== "admin") return { ok: false, msg: "仅老板可重置" };
-  await seed();
-  revalidateAll();
-  return { ok: true, msg: "已重置演示数据（重灌 9 埋雷盘点 + 库存）" };
+  return tryResult(async () => {
+    if (!DEMO_MODE) return { ok: false, msg: "非演示环境，已禁用重置" };
+    const u = await requireUser();
+    if (u.role !== "admin") return { ok: false, msg: "仅老板可重置" };
+    await seed();
+    revalidateAll();
+    return { ok: true, msg: "已重置演示数据（重灌 9 埋雷盘点 + 库存）" };
+  });
 }
 
 function isRedirect(e: unknown) {

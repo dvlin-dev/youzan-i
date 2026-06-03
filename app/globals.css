@@ -1342,3 +1342,27 @@ h2.sec {
     transition: none !important;
   }
 }
+
+/* 载入骨架（路由级 loading.tsx 用） */
+.sk-line {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  animation: sk-pulse 1.4s ease-in-out infinite;
+}
+.sk-row {
+  height: 38px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  margin-bottom: 10px;
+  animation: sk-pulse 1.4s ease-in-out infinite;
+}
+@keyframes sk-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}

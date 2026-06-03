@@ -3,7 +3,7 @@ import { z } from "zod";
 import { submitMove } from "@/lib/actions";
 import { auditSqlQuery } from "@/lib/ai/audit";
 import { guardReadonlySql } from "@/lib/ai/sql-guard";
-import { type Role, can } from "@/lib/constants";
+import { DEMO_MODE, type Role, can } from "@/lib/constants";
 import { levelOf, stockMap } from "@/lib/db/queries";
 import {
   READONLY_ROW_CAP,
@@ -113,7 +113,8 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
         const lines = Object.entries(s.buckets).map(
           ([b, v]) => `· ${names[b] ?? b}：${yuan(v!.val)}（${v!.n}项）`,
         );
-        return `盘亏毛额 ${yuan(s.loss)}（≈"差三万多"）；AI 归因后真实物净损失约 ${yuan(s.real)}、可追回 ${yuan(s.recover)}。\n${lines.join("\n")}`;
+        const hint = DEMO_MODE ? '（≈"差三万多"）' : "";
+        return `盘亏毛额 ${yuan(s.loss)}${hint}；AI 归因后真实物净损失约 ${yuan(s.real)}、可追回 ${yuan(s.recover)}。\n${lines.join("\n")}`;
       },
     });
   }

@@ -1,4 +1,5 @@
 import { Icon } from "@/components/icons";
+import { DEMO_MODE } from "@/lib/constants";
 
 import { STEPS, fmt } from "../types";
 
@@ -36,6 +37,7 @@ export function StocktakeHeader({
   function renderAction() {
     if (!canPost) return null;
     if (posted) {
+      if (!DEMO_MODE) return null;
       return (
         <button className="btn sm" onClick={onReset} disabled={busy}>
           <Icon name="clock" size={14} /> 重置演示数据

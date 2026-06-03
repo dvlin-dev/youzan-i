@@ -1,5 +1,11 @@
 export type Role = "warehouse" | "buyer" | "admin";
 
+/**
+ * 演示模式开关（默认开）。线上 demo 保留「· Demo」副标、角色切换、重置演示数据等；
+ * 真实小商家部署时设 `NEXT_PUBLIC_DEMO_MODE=0` 即可全部关掉，避免向真实用户露馅 / 误重置真账。
+ */
+export const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE !== "0";
+
 export const ROLE_LABEL: Record<Role, string> = {
   warehouse: "仓管",
   buyer: "采购",
