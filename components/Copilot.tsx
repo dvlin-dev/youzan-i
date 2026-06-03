@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
 import type { Role } from "@/lib/constants";
 
-type Step = { id: string; label: string; status: "running" | "done"; name?: string };
+type Step = { id: string; label: string; status: "running" | "done"; name?: string; icon?: string };
 type Msg = {
   role: "user" | "ai";
   id: number;
@@ -76,7 +76,7 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
             patch(aid, (m) => {
               const steps = m.steps ?? [];
               if (steps.some((s) => s.id === ev.id)) return m;
-              return { ...m, steps: [...steps, { id: ev.id as string, label: (ev.label as string) ?? (ev.name as string) ?? "工具", status: "running", name: ev.name as string }] };
+              return { ...m, steps: [...steps, { id: ev.id as string, label: (ev.label as string) ?? (ev.name as string) ?? "工具", status: "running", name: ev.name as string, icon: ev.icon as string }] };
             });
           } else if (ev.t === "tool" && ev.status === "done") {
             patch(aid, (m) => {
@@ -155,7 +155,7 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
             ) : (
               <div key={m.id} className="msg ai">
                 <Trace m={m} />
-                {m.text && <div className="cop-answer">{m.text}</div>}
+                {m.text && <div className="cop-answer">{renderRich(m.text)}</div>}
                 {m.docs && m.docs.length > 0 && (
                   <div className="tc-actions" style={{ marginTop: 10 }}>
                     <button className="btn primary sm" onClick={goReview}>
@@ -199,33 +199,54 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
   );
 }
 
-/** 过程区：思考中 / 思考内容 / 工具调用时间线。 */
+/** 极简富文本：把 **加粗** 渲染为 <strong>，其余按纯文本（换行由 pre-wrap 处理）。 */
+function renderRich(text: string) {
+  return text.split(/(\*\*[^*\n]+\*\*)/g).map((p, i) =>
+    p.startsWith("**") && p.endsWith("**") ? <strong key={i}>{p.slice(2, -2)}</strong> : p,
+  );
+}
+
+/** 过程区：思考（可折叠）+ 工具调用时间线。 */
 function Trace({ m }: { m: Msg }) {
   const steps = m.steps ?? [];
-  const showThinking = m.streaming && steps.length === 0 && !m.text && !m.thought;
-  if (!steps.length && !m.thought && !showThinking) return null;
+  const thinking = !!m.streaming && !m.text; // 仍在朝答案推进
+  const hasThought = !!m.thought;
+  if (!steps.length && !hasThought && !thinking) return null;
   return (
     <div className="cop-trace">
-      {showThinking && (
+      {hasThought && (
+        <details className="cop-think" open={thinking ? true : undefined}>
+          <summary>
+            {thinking ? <span className="spin" /> : <Icon name="spark" size={13} />}
+            <span>{thinking ? "思考中…" : "已深度思考"}</span>
+            <span className="caret">
+              <Icon name="chev" size={13} />
+            </span>
+          </summary>
+          <div className="cop-think-body">{m.thought}</div>
+        </details>
+      )}
+      {thinking && !hasThought && !steps.length && (
         <div className="cop-step running">
-          <span className="ic"><span className="spin" /></span>
+          <span className="chip"><span className="spin" /></span>
           <span className="lb">思考中…</span>
         </div>
       )}
-      {m.thought && (
-        <div className="cop-thought">
-          <Icon name="spark" size={12} />
-          <span>{m.thought}</span>
+      {steps.length > 0 && (
+        <div className="cop-steps">
+          {steps.map((s) => (
+            <div className={"cop-step " + s.status} key={s.id}>
+              <span className="chip">
+                <Icon name={s.icon || "tool"} size={13} />
+              </span>
+              <span className="lb">{s.label}</span>
+              <span className="st">
+                {s.status === "running" ? <span className="spin" /> : <Icon name="check" size={13} />}
+              </span>
+            </div>
+          ))}
         </div>
       )}
-      {steps.map((s) => (
-        <div className={"cop-step " + s.status} key={s.id}>
-          <span className="ic">
-            {s.status === "running" ? <span className="spin" /> : <Icon name="check" size={12} />}
-          </span>
-          <span className="lb">{s.label}</span>
-        </div>
-      ))}
     </div>
   );
 }

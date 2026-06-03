@@ -993,39 +993,69 @@ h2.sec {
   padding: 9px 13px;
   border-radius: 14px 14px 4px 14px;
 }
+/* AI 回复不要气泡，直接落在面板背景上 */
 .msg.ai {
-  align-self: flex-start;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  padding: 11px 14px;
-  border-radius: 14px 14px 14px 4px;
+  align-self: stretch;
+  max-width: 100%;
+  background: none;
+  border: none;
+  padding: 2px 0 4px;
+  border-radius: 0;
   color: var(--text);
 }
 
-/* AI 过程区：思考 + 工具调用时间线 */
+/* 过程区：思考（可折叠）+ 工具调用时间线 */
 .cop-trace {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 11px;
   padding: 9px 11px;
-  margin-bottom: 9px;
+  margin-bottom: 11px;
 }
-.cop-thought {
+.cop-think > summary {
   display: flex;
-  gap: 6px;
-  align-items: flex-start;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  color: var(--text-2);
+  font-weight: 600;
   font-size: 12px;
-  font-style: italic;
-  color: var(--text-3);
-  line-height: 1.5;
+  list-style: none;
+  user-select: none;
 }
-.cop-thought svg {
-  color: var(--primary-600);
-  flex: none;
-  margin-top: 2px;
+.cop-think > summary::-webkit-details-marker {
+  display: none;
+}
+.cop-think > summary .caret {
+  margin-left: auto;
+  color: var(--text-3);
+  display: inline-flex;
+  transition: transform 0.2s;
+}
+.cop-think[open] > summary .caret {
+  transform: rotate(90deg);
+}
+.cop-think .cop-think-body {
+  margin-top: 7px;
+  padding: 8px 11px;
+  border-left: 2px solid var(--primary-600);
+  background: var(--surface);
+  border-radius: 0 8px 8px 0;
+  white-space: pre-wrap;
+  font-style: italic;
+  line-height: 1.55;
+  color: var(--text-3);
+  font-size: 12px;
+  max-height: 260px;
+  overflow: auto;
+}
+.cop-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 .cop-step {
   display: flex;
@@ -1033,25 +1063,46 @@ h2.sec {
   gap: 9px;
   font-size: 12.5px;
   color: var(--text-2);
-  transition: color 0.2s;
+  padding: 2px 0;
 }
 .cop-step.done {
   color: var(--text-3);
 }
-.cop-step .ic {
+.cop-step .chip {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  flex: none;
+}
+.cop-step.running .chip {
+  color: var(--primary-600);
+  border-color: var(--primary-600);
+  background: var(--primary-weak);
+}
+.cop-step.done .chip {
+  color: var(--success);
+}
+.cop-step .lb {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cop-step .st {
+  flex: none;
   width: 16px;
   height: 16px;
   display: grid;
   place-items: center;
-  flex: none;
 }
-.cop-step.done .ic {
+.cop-step.done .st {
   color: var(--success);
-}
-.cop-step .lb {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  letter-spacing: -0.01em;
 }
 .spin {
   width: 12px;
@@ -1069,6 +1120,7 @@ h2.sec {
 }
 .cop-answer {
   white-space: pre-wrap;
+  line-height: 1.6;
 }
 .toolcard {
   margin-top: 10px;
