@@ -1,6 +1,6 @@
 # 计划：只读 SQL 工具（query_sql）
 
-> 状态：**规划中（未实现）**。给 AI agent 一个“读任意数据”的兜底工具，在不破坏安全的前提下，解除“只能用预置工具”的灵活性限制。完成后回写 `design/` 并在 `/docs` 去掉“规划中”。
+> 状态：**已完成（2026-06-03）**。稳定事实已回写 [`design/ai-native-architecture.md`](../design/ai-native-architecture.md)（「只读 SQL 工具」一节）与 [`design/tech-stack.md`](../design/tech-stack.md)，`/docs` 已去「规划中」。本文仅保留落地决策与验证记录，不作第二事实源。
 
 ## 动机
 
@@ -23,6 +23,22 @@
 - 脱敏字段不因自由 SQL 而泄露（成本价等）。
 - 正常 SELECT 能回答预置工具覆盖不到的长尾问题。
 
-## 落地后回写
+## 落地决策（与原计划的关键偏差）
 
-`design/ai-native-architecture`（工具链）+ `design/tech-stack`（工具集）+ `/docs`（去掉“规划中”标记）。
+原计划第 3 层「沿用字段脱敏」打算在**应用层**删 cost_price 列。落地时经对抗式红队（5 视角 + 综合）实测发现：**整行序列化绕过**——`to_jsonb(sku)` / `row_to_json(s)` / `array_to_json(array_agg(sku))` / `sku::text` 把成本价藏进非 `cost_price` 列名，既绕过 token 检查、又绕过按列名删除的输出脱敏，仓管越权读到成本价（critical）。
+
+修复：把脱敏从应用层下沉到 **DB 层**，与「权限在数据层生效」对齐——建**两个**只读角色：
+- `jxc_readonly`（采购/老板）：SELECT 业务表，无 `app_user`；
+- `jxc_readonly_wh`（仓管）：`search_path` 把 `sku` 指向**去掉 cost_price 的视图**，且无采购单/盘点表权限。
+
+于是成本价/受限表在仓管那条连接里 DB 层就不存在，整行序列化也带不出。其余红队发现一并修：`pg_stats` 统计目录（暴露列采样值）入语句层黑名单、`pg_sleep_for/_until` 补进危险函数、空 SQL 路径补审计、工具描述补全列。
+
+落地文件：`lib/ai/sql-guard.ts`（语句+数据层校验）、`lib/db/readonly.ts`（连接层按角色选连接）、`lib/db/setup-readonly.ts`（建角色）、`lib/ai/audit.ts`（审计）、`lib/ai/tools.ts`（query_sql 注册）、`lib/ai/copilot.ts`/`app/api/copilot/route.ts`（透传发起人）。env：`DATABASE_URL_READONLY` / `DATABASE_URL_READONLY_WH`。
+
+## 验证记录
+
+- 单测：`tests/sql-guard.test.ts` 60 项绿（含拒写/多语句/注释绕过/危险函数/pg_stats/角色脱敏）。
+- 连接层实测：只读角色对 UPDATE/INSERT/CREATE/DELETE 一律 “cannot execute … in a read-only transaction”；`readOnly` 事务再兜一层。
+- 越权读实测：仓管 `to_jsonb(sku)`/`row_to_json`/`sku::text`/`SELECT *`/`(to_jsonb(sku))->'cost_price'` 均不含成本价；`pg_stats`/`pg_sleep_for` 被拒；采购/老板 cost_price 正常可见。
+- 基线：`pnpm typecheck` / `pnpm lint` / `pnpm test` 全绿。
+- 待运维：把两条 `DATABASE_URL_READONLY*` 配到 Vercel 环境变量（本地 `.env.local` 已配）。

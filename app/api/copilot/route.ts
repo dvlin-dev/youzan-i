@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        for await (const ev of streamCopilot(message, u.role)) {
+        for await (const ev of streamCopilot(message, u)) {
           controller.enqueue(encoder.encode(line(ev)));
         }
       } catch (e) {

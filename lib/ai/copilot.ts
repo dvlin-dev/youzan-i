@@ -2,6 +2,7 @@ import { z } from "zod";
 import type OpenAI from "openai";
 import { allSkus } from "@/lib/db/queries";
 import { type Role } from "@/lib/constants";
+import type { SessionUser } from "@/lib/session";
 import { aiEnabled, getOpenAIClient } from "./client";
 import { getToolSpecs, type RecordedMove } from "./tools";
 
@@ -32,6 +33,10 @@ function toolLabel(name: string, args: Record<string, unknown>): string {
       const sign = args.type === "OUT" ? "−" : "+";
       return `${t} ${sku} ${sign}${args.qty}`.trim();
     }
+    case "query_sql": {
+      const q = String(args.sql ?? "").replace(/\s+/g, " ").trim();
+      return "只读查询 " + (q.length > 48 ? q.slice(0, 48) + "…" : q);
+    }
     default:
       return name;
   }
@@ -57,6 +62,7 @@ function buildInstructions(role: Role, cat: string) {
 
 # 能力
 查库存、查低库存/断码、盘点对账汇总、登记入库/出库（生成待复核单）。所有写操作都先进「待复核」、审批后才入账——安全闸在后面兜着，所以你可以放手登记。
+预置工具答不了的长尾数据问题（按时间/供应商/客户/类目等任意维度统计），用 query_sql 跑一条只读 SELECT——它只读不写、安全闸兜底。
 
 # 回应风格
 干练、口语、像同事搭话；先给结论再给细节。诚实优先：不确定就直说，别硬编。闲聊一两句带过。
@@ -91,6 +97,7 @@ function buildInstructions(role: Role, cat: string) {
 # 工具策略
 - query_stock / low_stock / recon_summary 只读，放心调。
 - record_move 直接生成待复核单，不必在对话里二次确认（审批闸兜底）；多笔就多次调用。
+- query_sql 只在前几个工具覆盖不到时用：写一条 SELECT（单条、不带分号/注释），金额是整数分要 /100 展示；被拒就换个查法、别硬试写操作。
 
 # 安全边界
 - 只对下方目录里真实存在的 款号/颜色/尺码下单；查不到就请用户核对再下——编 SKU 会生成错单。
@@ -113,7 +120,8 @@ type ChatMsg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
  * 这里手写循环，得以把 思考(reasoning_content) / 回答(content) / 工具调用 全部实时 yield 出去；
  * 工具仍是 `lib/ai/tools.ts` 的类型化工具（守恒 + RBAC + 审计 + 待复核审批闸），架构不变。
  */
-export async function* streamCopilot(message: string, role: Role): AsyncGenerator<CopilotEvent> {
+export async function* streamCopilot(message: string, user: SessionUser): AsyncGenerator<CopilotEvent> {
+  const role: Role = user.role;
   if (!aiEnabled()) {
     yield {
       t: "final",
@@ -135,7 +143,7 @@ export async function* streamCopilot(message: string, role: Role): AsyncGenerato
   const skus = await allSkus();
   const skuSet = new Set(skus.map((s) => s.skuCode));
   const recorded: RecordedMove[] = [];
-  const specs = getToolSpecs({ role, skus, skuSet, recorded });
+  const specs = getToolSpecs({ role, skus, skuSet, recorded, actor: { id: user.id, name: user.name } });
   const byName = new Map(specs.map((s) => [s.name, s]));
   const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = specs.map((s) => ({
     type: "function",

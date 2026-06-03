@@ -29,9 +29,13 @@ lib/db/schema.ts        Drizzle 表（含 stock_ledger 不可变流水 + move_dr
 lib/db/ledger.ts        append-only：唯一写库存入口 = 追加 posted 流水（无 update/delete）
 lib/db/draft.ts         待复核草稿区 + postDraftAtomic（单条原子语句守恒过账）
 lib/db/queries.ts       派生库存（SUM(delta)）、快照、报表查询
+lib/db/readonly.ts      query_sql 连接层：按角色选只读连接（仓管脱敏视图 / 其余 full）+ readOnly 事务 + 超时 + LIMIT
+lib/db/setup-readonly.ts 一次性建两个只读角色（仅 GRANT SELECT；仓管走去 cost_price 视图）
 lib/db/seed.ts          演示数据（79 SKU + 9 埋雷盘点）
 lib/actions.ts          类型化工具层（"use server"）：submitMove / reviewDoc / receivePO / … RBAC+守恒+审计
-lib/ai/tools.ts         Agent 工具注册表 getToolSpecs：query_stock / low_stock / recon_summary / record_move
+lib/ai/tools.ts         Agent 工具注册表 getToolSpecs：query_stock / low_stock / recon_summary / record_move / query_sql
+lib/ai/sql-guard.ts     query_sql 语句层+数据层校验（纯函数：单条 SELECT + 拒写/危险函数 + 角色脱敏）
+lib/ai/audit.ts         AI 工具审计留痕（query_sql 原始 SQL + 发起人 + 结果）
 lib/ai/copilot.ts       copilot 编排（手写流式 + 工具循环）
 lib/ai/explain.ts       盘点第 2 层 LLM 归因解释（按需触发、降级安全）
 lib/ai/client.ts        共享 OpenAI 客户端（经兼容网关）
@@ -53,6 +57,6 @@ tests/*                 Vitest（守恒不变量 + 归因检测器回归）
 | 出库不为负 + 并发不打穿 | `lib/db/draft.ts#postDraftAtomic`（单条 SQL 校验落账后 ≥ 0 才追加） |
 | 改库需审批入账（单人即可） | `lib/actions.ts#reviewDoc`（草稿 → posted）；`submitMove / receivePO` 只生成草稿 |
 | 金额整数分 | 全程 `cents`；展示 `lib/money.ts#yuan` |
-| RBAC + 字段脱敏在数据层 | `lib/constants.ts#can`；`lib/actions.ts#fetchLedger` 的 `maskCost`（成本不进响应体） |
-| AI 不写裸 SQL / 不直接落库 | 只能调 `lib/ai/tools.ts` 白名单工具；写操作走审批闸 |
+| RBAC + 字段脱敏在数据层 | `lib/constants.ts#can`；`lib/actions.ts#fetchLedger` 的 `maskCost`（成本不进响应体）；query_sql 经**独立只读角色**做 DB 层脱敏（仓管连接的 `sku` 是去 cost_price 视图） |
+| AI 不写裸 SQL 改库 / 不直接落库 | 写操作只能调 `lib/ai/tools.ts` 白名单工具走审批闸；**只读** SQL 可经 `query_sql` 跑受控单条 SELECT（`lib/ai/sql-guard.ts` 语句校验 + 独立只读角色物理拒写 + 字段脱敏 + 审计） |
 | 盘点第 1 层权威、第 2 层只解释 | `lib/stocktake/attribution.ts`（分桶 / 金额）；`lib/ai/explain.ts`（排序解释，不改结论） |

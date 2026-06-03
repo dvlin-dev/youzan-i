@@ -41,14 +41,15 @@ pnpm dev                        # http://localhost:3000
 2. 加 Postgres：`vercel integration add neon`（或在 Storage 里建 Neon，自动注入 `DATABASE_URL`）。
 3. 配环境变量：`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`、`AUTH_SECRET`（变量样例见 `.env.example`）。
 4. 部署。构建命令 `drizzle-kit push --force && next build` 会自动建表；首次部署后 `pnpm db:seed` 灌数据。
-5. 无 `OPENAI_API_KEY` 时 AI 优雅降级（仅确定性检测器 + 模板话术），应用照常可用。
+5. （可选）启用 AI `query_sql` 只读查询：`pnpm tsx ... lib/db/setup-readonly.ts` 建两个只读角色，把输出的 `DATABASE_URL_READONLY` / `DATABASE_URL_READONLY_WH` 配进 Vercel。不配则 `query_sql` 自动停用，其余工具照常。
+6. 无 `OPENAI_API_KEY` 时 AI 优雅降级（仅确定性检测器 + 模板话术），应用照常可用。
 
 ## 核心理念
 
 - **库存 = 流水累加**（append-only ledger），守恒不变量 `I1/I2` 随时成立；纠错只能红冲、永久留痕。待复核草稿存于独立 `move_draft` 表，与不可变流水**物理隔离**——`stock_ledger` 只增不改不删；复核入账时经**原子守恒护栏**（落账后库存不为负才追加），杜绝并发出库打穿库存。
 - **盘点对账**不是"找差异"，而是 **AI 两层归因**：第 1 层确定性检测器产出**权威**的分桶 / 金额 / 真损失判定（可复现）；第 2 层 LLM 按需对成因排序、给出可执行解释（基于第 1 层证据，不编造）。把"差三万"拆成：真损失该认、串色该互换、重复该红冲、可索赔该追——账面 −¥3.1 万 → 真实物净损失约 ¥1.2 万。
-- **AI 不写裸 SQL、不直接落库**：只调经守恒 + 权限 + 审计的类型化工具（`@openai/agents` 的 `tool()`，集中在 `lib/ai/tools.ts`）。AI 一轮可连续多步（agent loop）、直接生成待复核单，由审批闸兜底——任意人审批后才入账。
-- **权限在数据层生效**：接口 RBAC + 字段脱敏（成本价对仓管不出现），不是前端藏按钮。
+- **AI 不写裸 SQL 改库、不直接落库**：写操作只调经守恒 + 权限 + 审计的类型化工具（集中在 `lib/ai/tools.ts`），直接生成待复核单、由审批闸兜底；**只读**查询可经 `query_sql` 跑受控单条 SELECT——独立只读角色 DB 层物理拒写 + 字段脱敏（仓管连接的 `sku` 是去 cost_price 视图）+ 语句校验 + 审计。
+- **权限在数据层生效**：接口 RBAC + 字段脱敏（成本价对仓管不出现），不是前端藏按钮；连 AI 自由查询也由 DB 只读角色/视图兜底。
 
 ## 代码结构
 
@@ -56,9 +57,10 @@ pnpm dev                        # http://localhost:3000
 app/(app)/{dashboard,stock,move,purchase,stocktake}   角色化页面
 app/login · app/api/{auth,copilot}                    登录 · 鉴权 · AI 路由
 lib/db/{schema,client,queries,ledger,draft,seed}      数据层（库存=流水派生；draft=待复核草稿区，与不可变 ledger 隔离）
+lib/db/{readonly,setup-readonly}                      query_sql 连接层：按角色选只读角色（仓管走去 cost_price 脱敏视图）+ 建角色脚本
 lib/tools 即 lib/actions.ts                           类型化工具层（Server Actions，RBAC + 守恒护栏 + 审计）
 lib/stocktake/{attribution,engine}                    盘点归因（第 1 层确定性检测器，权威分桶/金额）
-lib/ai/{client,copilot,tools,explain}                 copilot（agent loop）+ tools（工具集中处）+ 第 2 层 LLM 归因解释
+lib/ai/{client,copilot,tools,sql-guard,audit,explain} copilot（agent loop）+ tools（含 query_sql）+ sql-guard/audit + 第 2 层 LLM 归因
 lib/stock-math.ts                                     库存守恒纯函数（可单测）
 tests/*                                               Vitest（守恒不变量 + 归因检测器回归）
 components/*                                          UI（暖色账册主题，token 化；响应式）

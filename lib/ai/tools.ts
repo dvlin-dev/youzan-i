@@ -5,6 +5,9 @@ import { submitMove } from "@/lib/actions";
 import { yuan } from "@/lib/money";
 import { can, type Role } from "@/lib/constants";
 import type { Sku } from "@/lib/db/schema";
+import { guardReadonlySql } from "@/lib/ai/sql-guard";
+import { readonlyEnabled, runReadonlyQuery, READONLY_ROW_CAP } from "@/lib/db/readonly";
+import { auditSqlQuery } from "@/lib/ai/audit";
 
 export type RecordedMove = { docNo: string; summary: string };
 
@@ -14,6 +17,8 @@ export type ToolCtx = {
   skuSet: Set<string>;
   /** record_move 把本轮生成的待复核单写进来，copilot 据此提示去审批。 */
   recorded: RecordedMove[];
+  /** 发起人：query_sql 等需要留痕「谁查的」。 */
+  actor: { id: string; name: string };
 };
 
 /** 一个类型化工具：Zod 入参（→ JSON schema 给模型） + 服务端 execute（守恒/权限/审计在内部）。 */
@@ -33,9 +38,10 @@ export type ToolSpec = {
  *   low_stock()                      只读：列出低于安全库存（含断码）的 SKU
  *   recon_summary()                  只读：盘点对账第 1 层归因汇总（仅采购/老板）
  *   record_move(type,...,qty)        写：登记一笔入/出库 → 待复核单（仅仓管/老板；一轮可多次）
+ *   query_sql(sql)                   只读：跑一条受控 SELECT，兜住预置工具覆盖不到的长尾问题
  */
 export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
-  const { role, skus, skuSet, recorded } = ctx;
+  const { role, skus, skuSet, recorded, actor } = ctx;
 
   const specs: ToolSpec[] = [
     {
@@ -125,5 +131,98 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
     });
   }
 
+  // query_sql：给 AI 一个「读任意数据」的兜底能力——只读不写，靠纵深防御三层。
+  // 人人可挂载（按角色脱敏在 guard 内生效）；写/DDL 经语句层拒，只读角色经连接层物理拒写。
+  specs.push({
+    name: "query_sql",
+    description:
+      "只读 SQL：跑一条 SELECT 查任意数据，回答预置工具覆盖不到的长尾问题" +
+      "（如『上月卡其色卖了多少』『哪个供应商到货最慢』『某客户本季出库 Top10』）。" +
+      "只读不写——只能单条 SELECT/WITH，写/DDL/多语句/注释一律被拒。先试 query_stock/low_stock/recon_summary，它们答不了再用它。\n" +
+      "可用表（金额均为整数分，展示时 /100；operator_id/reviewer_id/counter 存的是人名）：\n" +
+      "· sku(sku_code, style_no, style_name, category, color, size, cost_price, tag_price, safety_stock, barcode)\n" +
+      "· stock_ledger(id, sku_code, delta, biz_type, doc_no, ts, operator_id, reviewer_id, status, scanned, qc, po_ref, pd_adjust) —— 库存 = SUM(delta) WHERE status='posted'\n" +
+      "· move_draft(doc_no, sku_code, delta, biz_type, operator_id, po_ref, qc, scanned, created_at) —— 待复核草稿\n" +
+      "· purchase_order(po_no, supplier, status, created_by, eta, created_at) / po_line(po_no, sku_code, ordered, received, price)\n" +
+      "· stocktake(pd_no, scope, status, snap_ts, counter, created_by, counted_at) / stocktake_count(pd_no, sku_code, book_snapshot, actual, resolved)\n" +
+      "部分表/列按角色限制（如成本价 cost_price、采购单、盘点对仓管不可见）、用户表与统计目录人人不可读，被拒时换个查法即可。",
+    schema: z.object({
+      sql: z
+        .string()
+        .describe("一条只读 SELECT 语句，可含 WITH/JOIN/GROUP BY/ORDER BY/LIMIT。不要写分号分隔的多条语句，不要写注释。"),
+    }),
+    execute: async (a) => {
+      const raw = String(a.sql ?? "");
+      if (!readonlyEnabled(role)) {
+        auditSqlQuery({ actorId: actor.id, actorName: actor.name, role, sql: raw, outcome: "disabled" });
+        return "只读 SQL 暂不可用：系统未配置只读数据库角色（DATABASE_URL_READONLY）。请改用其它工具，或让管理员开启。";
+      }
+      const guard = guardReadonlySql(raw, role);
+      if (!guard.ok) {
+        auditSqlQuery({ actorId: actor.id, actorName: actor.name, role, sql: raw, outcome: "rejected", reason: guard.reason });
+        return `已拒绝该 SQL：${guard.reason}`;
+      }
+      try {
+        const { rows, truncated } = await runReadonlyQuery(guard.sql, role);
+        const safe = maskOutputColumns(rows, role);
+        auditSqlQuery({ actorId: actor.id, actorName: actor.name, role, sql: guard.sql, outcome: "ok", rowCount: safe.length });
+        return formatRows(safe, truncated);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        auditSqlQuery({ actorId: actor.id, actorName: actor.name, role, sql: guard.sql, outcome: "error", reason: msg });
+        const hint = /more than once|duplicate/i.test(msg) ? "（多列同名，请用 AS 给列取别名）" : "";
+        return `查询执行失败：${msg}${hint}`;
+      }
+    },
+  });
+
   return specs;
+}
+
+/** 当前角色不可出现在结果里的列：堵住 `SELECT *` 把受限列带出的口子（guard 只挡显式列名）。 */
+function deniedOutputColumns(role: Role): string[] {
+  const base = ["password_hash"];
+  return role === "warehouse" ? [...base, "cost_price"] : base;
+}
+
+/** 输出列脱敏——与 actions.ts 的 maskCost 同源：成本价对仓管不进响应体，哪怕来自 SELECT *。 */
+function maskOutputColumns(rows: Record<string, unknown>[], role: Role): Record<string, unknown>[] {
+  const denied = deniedOutputColumns(role);
+  if (!rows.length || !denied.some((c) => c in rows[0])) return rows;
+  return rows.map((r) => {
+    const copy = { ...r };
+    for (const c of denied) delete copy[c];
+    return copy;
+  });
+}
+
+/** 输出体量预算：防 repeat()/聚合把单元格放大成超大值（行上限只按行计、不按字节计）。 */
+const OUT_TOTAL_CAP = 8000; // 总字节预算
+const OUT_ROW_CAP = 2000; // 单行序列化上限——逐行物化时设界，不对全量行一次性 stringify
+
+/** 把只读查询结果整理成模型易读的紧凑文本：表头 + JSON 行，逐行按字节预算截断（防超大单元格）。 */
+function formatRows(rows: Record<string, unknown>[], truncated: boolean): string {
+  if (rows.length === 0) return "查询成功：0 行。";
+  const cols = Object.keys(rows[0]);
+  const parts: string[] = [];
+  let used = 0;
+  let shown = 0;
+  let clipped = false;
+  for (const r of rows) {
+    let s = JSON.stringify(r);
+    if (s.length > OUT_ROW_CAP) {
+      s = s.slice(0, OUT_ROW_CAP) + "…";
+      clipped = true;
+    }
+    if (used + s.length > OUT_TOTAL_CAP) {
+      clipped = true;
+      break;
+    }
+    parts.push(s);
+    used += s.length;
+    shown++;
+  }
+  const head = `查询成功：${rows.length} 行${truncated ? `（已截断到前 ${READONLY_ROW_CAP} 行）` : ""}｜列：${cols.join(", ")}`;
+  const note = shown < rows.length || clipped ? `\n（仅展示前 ${shown} 行 / 已按体量截断，请缩小范围或加聚合）` : "";
+  return `${head}\n[${parts.join(",")}]${note}`;
 }
