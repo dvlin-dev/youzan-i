@@ -1,3 +1,7 @@
+# 钉传递性依赖到已修复版本（next→postcss XSS、drizzle-kit→esbuild SSRF）
+overrides:
+  postcss: ">=8.5.10"
+  esbuild: ">=0.24.3"
 onlyBuiltDependencies:
   - esbuild
   - sharp
