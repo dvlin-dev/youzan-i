@@ -47,16 +47,17 @@ export function createTools(agents: Agents, ctx: ToolCtx) {
 
   const lowStock = tool({
     name: "low_stock",
-    description: "列出低于安全库存（含断码）的 SKU",
+    description:
+      "列出低于安全库存（含断码）的 SKU，每条带齐 款号/颜色/尺码/当前库存/安全库存——可直接据此调 record_move 补货，不必再向用户索要色码。",
     parameters: z.object({}),
     execute: async () => {
       const sm = await stockMap();
       const low = skus.filter((s) => levelOf(sm[s.skuCode] ?? 0, s.safetyStock) !== "ok");
       if (!low.length) return "库存健康，暂无低库存。";
-      return (
-        `共 ${low.length} 个 SKU 低于安全库存：\n` +
-        low.slice(0, 8).map((s) => `· ${s.styleName} ${s.color}/${s.size} — ${sm[s.skuCode] ?? 0} 件`).join("\n")
+      const lines = low.map(
+        (s) => `· 款号 ${s.styleNo}｜颜色 ${s.color}｜尺码 ${s.size}（${s.styleName}）当前 ${sm[s.skuCode] ?? 0} 件 / 安全库存 ${s.safetyStock}`,
       );
+      return `共 ${low.length} 个 SKU 低于安全库存（含断码），款号/颜色/尺码已给全，可直接据此补货：\n${lines.join("\n")}`;
     },
   });
 
@@ -84,8 +85,9 @@ export function createTools(agents: Agents, ctx: ToolCtx) {
   const recordMove = tool({
     name: "record_move",
     description:
-      "登记一笔入库(IN)或出库(OUT)：直接生成待复核单据，不需要在对话里二次确认（审批闸会兜底）。" +
-      "务必把用户描述映射到目录里真实存在的 款号/颜色/尺码；一轮里可多次调用以完成多笔。",
+      "登记一笔入库(IN)或出库(OUT)，直接生成待复核单（不需要在对话里二次确认，审批闸会兜底）。" +
+      "qty 是这一笔的件数；『补货到 N 件』时 qty = N − 当前库存（当前库存用 low_stock / query_stock 查）。" +
+      "务必映射到目录里真实存在的 款号/颜色/尺码；一轮里可多次调用以完成多笔（例如把多个低库存 SKU 一次补齐）。",
     parameters: z.object({
       type: z.enum(["IN", "OUT"]),
       styleNo: z.string(),
