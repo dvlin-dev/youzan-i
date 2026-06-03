@@ -135,6 +135,8 @@
   table.t tr:last-child td { border-bottom: none; }
   table.t td .mono { font-size: 12px; color: var(--primary); }
   table.t td b { color: var(--ink); }
+  table.t tr.planned td { color: var(--text-3); background: repeating-linear-gradient(135deg, transparent, transparent 7px, rgba(168,110,20,.04) 7px, rgba(168,110,20,.04) 14px); }
+  .soon { font-size: 10px; font-weight: 700; color: var(--warn); background: var(--warn-weak); padding: 1px 7px; border-radius: 100px; margin-left: 6px; white-space: nowrap; }
 
   pre.tree { background: var(--ink); color: #d7d0c0; border-radius: 13px; padding: 18px 20px; overflow: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.9; margin-top: 20px; }
   pre.tree .c { color: #8a8167; }
@@ -333,9 +335,11 @@
         <tr><td><b>low_stock</b></td><td>读</td><td class="mono">—</td><td>列出低于安全库存（含断码）的 SKU，带 款 / 色 / 码 / 当前 / 安全。</td><td>全部</td></tr>
         <tr><td><b>recon_summary</b></td><td>读</td><td class="mono">—</td><td>盘点对账归因汇总：盘亏毛额 / 真损失 / 可追回 / 各成因分桶。</td><td>采购 · 老板</td></tr>
         <tr><td><b>record_move</b></td><td>写</td><td class="mono">type, styleNo, color, size, qty</td><td>登记一笔入 / 出库 → 生成待复核单（不直接落库）；一轮可多次。</td><td>仓管 · 老板</td></tr>
+        <tr class="planned"><td><b>query_sql</b> <span class="soon">规划中</span></td><td>读</td><td class="mono">sql（单条 SELECT）</td><td>跑任意只读 SQL 查任意数据——兜住长尾问题，不被预置工具限制。</td><td>按角色</td></tr>
       </tbody>
     </table>
     <p class="intro" style="font-size:14px">这些是 <span class="mono">lib/ai/tools.ts</span> 暴露给 AI 的<b>白名单工具</b>：Zod 入参（→ JSON schema 喂给模型）+ 服务端 <span class="mono">execute</span>（守恒 / 权限 / 审计在内部）。它们按角色挂载、是类型化工具层 <span class="mono">lib/actions.ts</span> 的子集，写操作只生成待复核单。盘点第 2 层归因解释 <span class="mono">explainDiff</span> 由差异抽屉按需触发，不在对话工具集内。</p>
+    <p class="note"><b>规划中 · 只读 SQL 工具（query_sql）</b>：给 AI 一个“读任意数据”的兜底能力——它能跑任意 <span class="mono">SELECT</span> 回答预置工具覆盖不到的长尾问题，但<b>只读不写</b>，靠纵深防御：① 语句层只允许单条 SELECT（拒绝 INSERT/UPDATE/DELETE/DDL/多语句）；② 连接层用<b>只读数据库角色</b>（仅 GRANT SELECT），即使解析被绕过 DB 也物理拒写；③ 仍受字段脱敏约束，加语句超时 + LIMIT 兜底。既保住灵活性，又把“只读”焊在数据层（设计见 <span class="mono">plan/2026-06-03-readonly-sql-tool</span>）。</p>
   </div>
 </section>
 
