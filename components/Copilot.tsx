@@ -4,43 +4,116 @@ import { useRouter } from "next/navigation";
 import { Icon } from "./icons";
 import type { Role } from "@/lib/constants";
 
-type Msg = { role: "user" | "ai"; text?: string; docs?: string[] };
+type Step = { id: string; label: string; status: "running" | "done"; name?: string };
+type Msg = {
+  role: "user" | "ai";
+  id: number;
+  text?: string;
+  thought?: string;
+  steps?: Step[];
+  docs?: string[];
+  streaming?: boolean;
+};
 
 const SUGG: Record<Role, string[]> = {
   warehouse: ["AW2024-3301 藏青/黑/米白 M 各入 50 件", "黑色 L 卫衣 出 24 件", "哪些 SKU 快断货了？"],
   buyer: ["帮我对一下账，差在哪", "哪些 SKU 快断货了？", "查 AW2024-9902 卡其 L 库存"],
-  admin: ["AW2024-3301 藏青 M 入 30、黑 M 出 20", "帮我对一下账，差在哪", "哪些 SKU 快断货了？"],
+  admin: ["看看哪些快断货了，都补到 30", "AW2024-3301 藏青 M 入 30、黑 M 出 20", "帮我对一下账，差在哪"],
 };
 
 export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const idRef = useRef(0);
   const router = useRouter();
   const bodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bodyRef.current?.scrollTo(0, 1e9);
   }, [msgs, busy]);
 
+  const patch = (id: number, fn: (m: Msg) => Msg) =>
+    setMsgs((ms) => ms.map((m) => (m.id === id ? fn(m) : m)));
+
   async function send(text: string) {
     if (!text.trim() || busy) return;
-    setMsgs((m) => [...m, { role: "user", text }]);
+    const uid = ++idRef.current;
+    const aid = ++idRef.current;
+    setMsgs((m) => [...m, { role: "user", id: uid, text }, { role: "ai", id: aid, steps: [], text: "", streaming: true }]);
     setInput("");
     setBusy(true);
+    let mutated = false;
     try {
       const res = await fetch("/api/copilot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
       });
-      const data = await res.json();
-      setMsgs((m) => [...m, { role: "ai", text: data.text, docs: data.docs }]);
-      // 本轮有出入库写操作 → 刷新待复核角标
-      if (data.mutated) router.refresh();
+      if (!res.body) throw new Error("no stream");
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const raw = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!raw) continue;
+          let ev: Record<string, unknown>;
+          try {
+            ev = JSON.parse(raw);
+          } catch {
+            continue;
+          }
+          if (ev.t === "thought") {
+            patch(aid, (m) => ({ ...m, thought: (m.thought ?? "") + (ev.delta as string) }));
+          } else if (ev.t === "text") {
+            patch(aid, (m) => ({ ...m, text: (m.text ?? "") + (ev.delta as string) }));
+          } else if (ev.t === "tool" && ev.status === "running") {
+            patch(aid, (m) => {
+              const steps = m.steps ?? [];
+              if (steps.some((s) => s.id === ev.id)) return m;
+              return { ...m, steps: [...steps, { id: ev.id as string, label: (ev.label as string) ?? (ev.name as string) ?? "工具", status: "running", name: ev.name as string }] };
+            });
+          } else if (ev.t === "tool" && ev.status === "done") {
+            patch(aid, (m) => {
+              const steps = m.steps ?? [];
+              const hasId = steps.some((s) => s.id === ev.id);
+              let fb = false;
+              return {
+                ...m,
+                steps: steps.map((s) => {
+                  if (hasId ? s.id === ev.id : !fb && s.status === "running") {
+                    fb = true;
+                    return { ...s, status: "done" as const };
+                  }
+                  return s;
+                }),
+              };
+            });
+          } else if (ev.t === "final") {
+            mutated = !!ev.mutated;
+            patch(aid, (m) => ({
+              ...m,
+              text: m.text || (ev.text as string),
+              docs: ev.docs as string[],
+              streaming: false,
+              steps: (m.steps ?? []).map((s) => ({ ...s, status: "done" as const })),
+            }));
+          } else if (ev.t === "error") {
+            patch(aid, (m) => ({ ...m, text: ev.message as string, streaming: false }));
+          }
+        }
+      }
     } catch {
-      setMsgs((m) => [...m, { role: "ai", text: "网络出错，请重试。" }]);
+      patch(aid, (m) => ({ ...m, text: "网络出错，请重试。", streaming: false }));
     }
+    patch(aid, (m) => ({ ...m, streaming: false }));
     setBusy(false);
+    if (mutated) router.refresh();
   }
 
   function goReview() {
@@ -74,14 +147,15 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
               {"\n\n"}出入库我会直接生成<b>待复核单</b>（一句话里多笔会一次办完）——不直接改库，去「入库/出库 → 待复核」<b>审批</b>后才入账。
             </div>
           )}
-          {msgs.map((m, i) =>
+          {msgs.map((m) =>
             m.role === "user" ? (
-              <div key={i} className="msg user">
+              <div key={m.id} className="msg user">
                 {m.text}
               </div>
             ) : (
-              <div key={i} className="msg ai">
-                {m.text}
+              <div key={m.id} className="msg ai">
+                <Trace m={m} />
+                {m.text && <div className="cop-answer">{m.text}</div>}
                 {m.docs && m.docs.length > 0 && (
                   <div className="tc-actions" style={{ marginTop: 10 }}>
                     <button className="btn primary sm" onClick={goReview}>
@@ -92,7 +166,6 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
               </div>
             ),
           )}
-          {busy && <div className="msg ai dim">思考中…</div>}
         </div>
 
         <div className="cop-foot">
@@ -123,5 +196,36 @@ export function Copilot({ role, onClose }: { role: Role; onClose: () => void }) 
         </div>
       </aside>
     </>
+  );
+}
+
+/** 过程区：思考中 / 思考内容 / 工具调用时间线。 */
+function Trace({ m }: { m: Msg }) {
+  const steps = m.steps ?? [];
+  const showThinking = m.streaming && steps.length === 0 && !m.text && !m.thought;
+  if (!steps.length && !m.thought && !showThinking) return null;
+  return (
+    <div className="cop-trace">
+      {showThinking && (
+        <div className="cop-step running">
+          <span className="ic"><span className="spin" /></span>
+          <span className="lb">思考中…</span>
+        </div>
+      )}
+      {m.thought && (
+        <div className="cop-thought">
+          <Icon name="spark" size={12} />
+          <span>{m.thought}</span>
+        </div>
+      )}
+      {steps.map((s) => (
+        <div className={"cop-step " + s.status} key={s.id}>
+          <span className="ic">
+            {s.status === "running" ? <span className="spin" /> : <Icon name="check" size={12} />}
+          </span>
+          <span className="lb">{s.label}</span>
+        </div>
+      ))}
+    </div>
   );
 }
