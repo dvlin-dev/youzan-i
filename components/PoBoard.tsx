@@ -2,9 +2,10 @@
 import { useRouter } from "next/navigation";
 import { type CSSProperties, useState } from "react";
 
-import { receivePO } from "@/lib/actions";
+import { receivePO, submitPO } from "@/lib/actions";
 import { yuan } from "@/lib/money";
 
+import { CreatePoForm, type PoSkuOpt } from "./CreatePoForm";
 import { Icon } from "./icons";
 import { useToast } from "./toast";
 
@@ -70,8 +71,17 @@ function ProgressBar({
   );
 }
 
-export function PoBoard({ pos, canCost }: { pos: Po[]; canCost: boolean }) {
+export function PoBoard({
+  pos,
+  canCost,
+  skus,
+}: {
+  pos: Po[];
+  canCost: boolean;
+  skus: PoSkuOpt[];
+}) {
   const [sel, setSel] = useState<Po | null>(null);
+  const [creating, setCreating] = useState(false);
   const router = useRouter();
   const toast = useToast();
 
@@ -83,11 +93,29 @@ export function PoBoard({ pos, canCost }: { pos: Po[]; canCost: boolean }) {
       router.refresh();
     }
   }
+  async function submit(poNo: string) {
+    const r = await submitPO(poNo);
+    toast(r.msg, r.ok ? "ok" : "err");
+    if (r.ok) {
+      setSel(null);
+      router.refresh();
+    }
+  }
 
   return (
     <>
-      <div className="toolbar">
+      <div
+        className="toolbar"
+        style={{ display: "flex", alignItems: "center", gap: 12 }}
+      >
         <div className="dim">共 {pos.length} 张采购单</div>
+        <button
+          className="btn primary sm"
+          style={{ marginLeft: "auto" }}
+          onClick={() => setCreating(true)}
+        >
+          <Icon name="in" size={14} /> 新建采购单
+        </button>
       </div>
       <div className="card">
         <table className="tbl">
@@ -158,7 +186,11 @@ export function PoBoard({ pos, canCost }: { pos: Po[]; canCost: boolean }) {
           canCost={canCost}
           onClose={() => setSel(null)}
           onReceive={receive}
+          onSubmit={submit}
         />
+      )}
+      {creating && (
+        <CreatePoForm skus={skus} onClose={() => setCreating(false)} />
       )}
     </>
   );
@@ -169,11 +201,13 @@ function PoDrawer({
   canCost,
   onClose,
   onReceive,
+  onSubmit,
 }: {
   po: Po;
   canCost: boolean;
   onClose: () => void;
   onReceive: (poNo: string) => void;
+  onSubmit: (poNo: string) => void;
 }) {
   const idx = FLOW.indexOf(po.status === "已取消" ? "草稿" : po.status);
   const ord = po.lines.reduce((a, l) => a + l.ordered, 0);
@@ -190,6 +224,17 @@ function PoDrawer({
           <Icon name="clock" size={13} />{" "}
           已有到货单待复核——复核入账后才更新到货进度
         </div>
+      );
+    }
+    if (po.status === "草稿") {
+      return (
+        <button
+          className="btn primary"
+          style={{ width: "100%", marginTop: 16, justifyContent: "center" }}
+          onClick={() => onSubmit(po.poNo)}
+        >
+          <Icon name="check" size={15} /> 下单（草稿 → 已下单）
+        </button>
       );
     }
     if (["已下单", "部分到货"].includes(po.status)) {

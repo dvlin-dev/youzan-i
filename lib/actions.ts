@@ -17,7 +17,7 @@ import {
   postDraftAtomic,
 } from "./db/draft";
 import { insertRows } from "./db/ledger";
-import { getPo, ledgerOf, receivedByPo, stockMap } from "./db/queries";
+import { allSkus, getPo, ledgerOf, receivedByPo, stockMap } from "./db/queries";
 import {
   type Sku,
   poLine,
@@ -210,6 +210,72 @@ export async function receivePO(poNo: string): Promise<Result> {
       msg: `${poNo} 登记到货，生成 ${doc}（待复核，复核入账后才更新到货进度）`,
       docNo: doc,
     };
+  });
+}
+
+const PoInput = z.object({
+  supplier: z.string().trim().min(1, "请填供应商"),
+  eta: z.string().trim(),
+  lines: z
+    .array(
+      z.object({ skuCode: z.string(), ordered: z.number().int().positive() }),
+    )
+    .min(1, "请至少录入一个明细"),
+});
+export type PoInput = z.infer<typeof PoInput>;
+
+/** 新建采购单（草稿）：单价取 SKU 成本价（采购可见）。下单前可继续改，下单后才可收货。 */
+export async function createPO(raw: PoInput): Promise<Result> {
+  return tryResult(async () => {
+    const u = await requireUser();
+    if (!can.po(u.role)) return { ok: false, msg: "无权新建采购单" };
+    const input = PoInput.parse(raw);
+    const priceOf = new Map(
+      (await allSkus()).map((s) => [s.skuCode, s.costPrice]),
+    );
+    const lines = input.lines.filter((l) => priceOf.has(l.skuCode));
+    if (!lines.length) return { ok: false, msg: "明细里没有有效 SKU" };
+    const poNo = docNo("PO");
+    await db.insert(purchaseOrder).values({
+      poNo,
+      supplier: input.supplier,
+      status: "草稿",
+      createdBy: u.name,
+      eta: input.eta || null,
+    });
+    await db.insert(poLine).values(
+      lines.map((l) => ({
+        poNo,
+        skuCode: l.skuCode,
+        ordered: l.ordered,
+        received: 0,
+        price: priceOf.get(l.skuCode) ?? 0,
+      })),
+    );
+    revalidateAll();
+    return {
+      ok: true,
+      msg: `已新建采购单 ${poNo}（草稿，去『下单』后可收货）`,
+      docNo: poNo,
+    };
+  });
+}
+
+/** 草稿采购单下单（草稿 → 已下单），下单后才进入收货流程。 */
+export async function submitPO(poNo: string): Promise<Result> {
+  return tryResult(async () => {
+    const u = await requireUser();
+    if (!can.po(u.role)) return { ok: false, msg: "无权操作采购单" };
+    const po = await getPo(poNo);
+    if (!po) return { ok: false, msg: "采购单不存在" };
+    if (po.status !== "草稿") return { ok: false, msg: "仅草稿状态可下单" };
+    if (!po.lines.length) return { ok: false, msg: "采购单无明细，不能下单" };
+    await db
+      .update(purchaseOrder)
+      .set({ status: "已下单" })
+      .where(eq(purchaseOrder.poNo, poNo));
+    revalidateAll();
+    return { ok: true, msg: `${poNo} 已下单，可登记到货` };
   });
 }
 
