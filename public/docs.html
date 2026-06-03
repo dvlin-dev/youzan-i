@@ -145,6 +145,25 @@
   .note b { color: var(--ink); }
   .note.mono { font-family: var(--mono); font-size: 12.5px; }
 
+  /* Q&A (交付方法论) */
+  .qa { margin-top: 24px; padding-top: 22px; border-top: 1px dashed var(--border); }
+  .qa.first { border-top: none; padding-top: 6px; }
+  .qa-h { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .qa-n { font-family: var(--mono); font-weight: 700; font-size: 13px; color: var(--primary-600); }
+  .qa-h h4 { font-family: var(--display); font-size: 18px; color: var(--ink); margin: 0; font-weight: 700; }
+  .qa-ask { color: var(--text-3); font-size: 13px; }
+  .qa-a { margin-top: 9px; }
+  .qa-a > p { margin: 9px 0 0; font-size: 14.5px; color: var(--text-2); }
+  .qa-a > p:first-child { margin-top: 0; }
+  .qa-a .grid, .qa-a table.t, .qa-a ol.steps { margin-top: 13px; }
+  ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: st; display: grid; gap: 8px; }
+  ol.steps li { counter-increment: st; position: relative; padding: 10px 14px 10px 46px; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; font-size: 14px; color: var(--text-2); box-shadow: var(--shadow); }
+  ol.steps li b { color: var(--ink); }
+  ol.steps li::before { content: counter(st); position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 7px; background: var(--primary-weak); color: var(--primary-600); font-family: var(--mono); font-weight: 700; font-size: 12px; display: grid; place-items: center; }
+  ul.snips { margin: 0; padding-left: 18px; }
+  ul.snips li { font-size: 13.5px; color: var(--text-2); margin: 7px 0; }
+  ul.snips li b { color: var(--ink); }
+
   /* closing */
   .closing { background: var(--ink); color: #ece6d8; }
   .closing h2 { color: #fff; max-width: 940px; }
@@ -170,6 +189,7 @@
       <a href="#ai">AI-Native</a>
       <a href="#arch">技术架构</a>
       <a href="#kb">知识库</a>
+      <a href="#delivery">交付方法论</a>
     </nav>
     <a class="demo-link" href="https://youzan-i-bowlingqs-projects.vercel.app" target="_blank" rel="noopener">在线 demo <span>↗</span></a>
   </div>
@@ -398,6 +418,98 @@
       <div class="card"><div class="kicker">流向</div><h4>plan → design / reference</h4><p>新需求先写 <span class="mono">plan/</span>；被采纳的稳定事实回写 <span class="mono">design/</span> 或 <span class="mono">reference/</span>，plan 只留验证记录。</p></div>
       <div class="card"><div class="kicker">归属</div><h4>架构进 design，可复用进 reference</h4><p>架构 / 数据模型 / 技术栈 → <span class="mono">design/</span>；可总结复用的工作流 / 标准 → <span class="mono">reference/</span>。</p></div>
       <div class="card"><div class="kicker">为什么</div><h4>稳定上下文、不漂移</h4><p>人和多个 AI agent 都读同一份事实源；冲突时以 design / reference 专题文档为准，方法论叙事次之。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 交付方法论 / 面试 5 问 -->
+<section id="delivery">
+  <div class="wrap">
+    <div class="sec-h">交付方法论</div>
+    <h2>用 AI 把它做出来的 · 面试关心的 5 个问题</h2>
+    <p class="intro">不止“用 AI 写代码”，而是一套可复现的“需求 → 产品”交付流程：原型先行、文档对齐、知识库治理、可回归评估。下面按面试常问的 5 个问题展开。</p>
+
+    <div class="qa first">
+      <div class="qa-h"><span class="qa-n">Q1</span><h4>拆解与编排</h4><span class="qa-ask">怎么把模糊描述拆成 AI 能执行的输入？</span></div>
+      <div class="qa-a">
+        <p>先给一个<b>大概的需求</b> → 让 AI <b>联网调研</b>（社区实践 + 论文，给方案找先验）→ 让它先出一个<b>高保真原型</b> → 基于原型<b>快速对齐</b>成想要的样子 → 再把稳定结论<b>沉淀成架构与知识库</b>。关键：不在“写完一大坨代码”之后才对齐，而是用低成本的原型先把方向与数据模型敲定。</p>
+        <p>prompt / skill / 子任务的组织靠知识库：根 <span class="mono">CLAUDE.md</span> 做事实源路由 + <span class="mono">reference/prompt-skill-templates</span> 四个可复用模板（需求澄清 / 生成页面 / 生成 mock / 自检），把模糊原话翻译成“数据动作 + 默认值 + 阻塞分类”。</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="qa-h"><span class="qa-n">Q2</span><h4>工具链路</h4><span class="qa-ask">用了哪些 AI 工具，各自什么角色？</span></div>
+      <div class="qa-a">
+        <table class="t">
+          <thead><tr><th style="width:200px">工具</th><th>在交付链路里的角色</th></tr></thead>
+          <tbody>
+            <tr><td><b>Claude Code</b><br><span class="mono">编码 agent</span></td><td>主力执行：把调研 / 写原型 / 写生产代码 / 跑测试 / 部署串成一个 agent 闭环。</td></tr>
+            <tr><td><b>联网检索</b><br><span class="mono">WebSearch / WebFetch</span></td><td>调研社区实践与论文，给方案找先验、避免凭空设计。</td></tr>
+            <tr><td><b>高保真原型</b><br><span class="mono">jxc-prototype.html</span></td><td>单文件、零依赖、可离线——最低成本对齐方向与数据模型。</td></tr>
+            <tr><td><b>知识库</b><br><span class="mono">CLAUDE.md + docs/*</span></td><td>稳定上下文 / 单一事实源 / 多 agent 协作地基（见上一节）。</td></tr>
+            <tr><td><b>agent-browser</b><br><span class="mono">浏览器自动化</span></td><td>端到端验证：预填登录、RBAC 脱敏、盘点数、copilot 全链路。</td></tr>
+            <tr><td><b>Vercel CLI + GitHub</b></td><td>部署与同步：自动建表 + 灌 seed，一键上线、main 即部署。</td></tr>
+            <tr><td><b>产品内类型化工具</b><br><span class="mono">lib/ai/tools.ts</span></td><td>运行时 AI 的执行边界（守恒 + 权限 + 审计）——即 L1 工具层。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="qa-h"><span class="qa-n">Q3</span><h4>翻车与救场</h4><span class="qa-ask">AI 哪里翻车了，怎么救的？</span></div>
+      <div class="qa-a">
+        <p>核心心法：<b>让错误在便宜的阶段暴露</b>——原型 &gt; plan &gt; 代码。三道防线：</p>
+        <div class="grid g3">
+          <div class="card"><div class="kicker">防线 1 · 原型期</div><h4>抓方向 / 理解偏差</h4><p>趁原型成本低，先把“实盘到底进不进状态”“对账差异从哪来”这类大方向敲定（结论：实盘是一次性校准输入、不是状态）。</p></div>
+          <div class="card"><div class="kicker">防线 2 · plan 期</div><h4>定稿后人工 review</h4><p>plan 文档定好后人工复核，在写大量代码<b>之前</b>把理解对齐、把偏差讨论清楚。</p></div>
+          <div class="card"><div class="kicker">防线 3 · 代码后</div><h4>文档先行再改码</h4><p>仍有漏聊 / 没做对的，基于当前版修改——且<b>先回写文档、再改代码</b>。</p></div>
+        </div>
+        <p class="note">真实例子：外部 agent 评审发现 <b>并发出库可打穿库存 / 采购状态机账实不一致 / 成本脱敏不在数据层 / append-only 名不副实</b>，逐条修复（原子守恒护栏 <span class="mono">postDraftAtomic</span>、草稿表物理隔离 <span class="mono">move_draft</span>、<span class="mono">maskCost</span>）；以及 @openai/agents 不暴露网关 reasoning → 改手写流式循环。</p>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="qa-h"><span class="qa-n">Q4</span><h4>工作流迭代</h4><span class="qa-ask">再做一遍会怎么改工作流？</span></div>
+      <div class="qa-a">
+        <p>这套工作流本身就是迭代沉淀出来的，下次<b>直接复用</b>；换行业只换领域维度（款 × 色 × 码 → 对应维度）与守恒不变量，流程原样再跑：</p>
+        <ol class="steps">
+          <li><b>模糊需求 → AI 联网调研</b>（社区实践 + 论文）</li>
+          <li><b>高保真原型 → 基于原型对齐方向</b>（低成本纠偏，敲定数据模型）</li>
+          <li><b>plan 文档 → 人工 review</b>（写大量代码前对齐理解）</li>
+          <li><b>知识库沉淀</b>（CLAUDE.md + docs/{design, plan, reference}，单一事实源）</li>
+          <li><b>生产实现</b>（类型化工具 + 守恒 + 测试 + 一键部署）</li>
+          <li><b>迭代回路</b>：发现问题 → 基于当前版改 → 先回写文档、再改代码 → 测试 / 部署 → 稳定事实回 design / reference</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="qa">
+      <div class="qa-h"><span class="qa-n">Q5</span><h4>评估与判断</h4><span class="qa-ask">怎么判断这版比上一版好？靠感觉还是可重复标准？</span></div>
+      <div class="qa-a">
+        <p><b>原型期</b>偏人工判断，但脑子里有明确的执行 case——主链路（入库 → 预警 → 采购 → 盘点）必须能跑通。<b>落地期</b>转为两类可重复的自动化评估：</p>
+        <div class="grid g2">
+          <div class="card"><div class="kicker">① 单工具执行测试</div><h4>保证每个 tool 的逻辑正确</h4><p>给工具写测试用例——Vitest：库存守恒不变量 I1 / I2 + 6 类归因检测器回归。</p></div>
+          <div class="card"><div class="kicker">② 加上 AI 的端到端测试</div><h4>看整条链路能否达预期</h4><p>人工累积具体场景，调用 AI 跑完整流程——agent-browser 跑 copilot 全链路（一句话补货 → 5 张待复核单 → 审批入账）。</p></div>
+        </div>
+        <p>再加<b>六维评分卡 + RC-01..09 回归用例</b>作为“好不好”的可重复标准（见 <span class="mono">reference/evaluation-rubric</span>）。一句话：好不好是<b>算出来的</b>，不是感觉出来的。</p>
+      </div>
+    </div>
+
+    <h3 class="sub">附：demo 与最能体现思路的几段对话</h3>
+    <div class="grid g2">
+      <div class="card">
+        <h4>可访问的成果</h4>
+        <p>在线应用 <span class="mono">youzan-i-bowlingqs-projects.vercel.app</span>（三角色预填账号）· 本页讲解 <span class="mono">/docs</span> · GitHub 源码与提交历史。</p>
+      </div>
+      <div class="card">
+        <h4>体现思路的对话片段</h4>
+        <ul class="snips">
+          <li>「实盘到底进不进状态？」——一句追问推翻初版，确立 <b>实盘 = 一次性校准输入</b>，长期痕迹是它生成的盘盈 / 盘亏流水。</li>
+          <li>「系统做得好，为什么还有对账差异？」——逼出 <b>两类差异 + 6 类成因 + 两层归因</b>。</li>
+          <li>「AI 反复要色码、不够聪明」——定位到 low_stock 输出结构 + prompt 过度收敛 + 未开 reasoning，重构后<b>一轮搞定补货</b>。</li>
+          <li>评审驱动：按业务把“双人复核”改为 <b>单人审批闸</b>，同时补上并发<b>守恒护栏</b>。</li>
+        </ul>
+      </div>
     </div>
   </div>
 </section>
