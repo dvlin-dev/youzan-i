@@ -188,7 +188,7 @@
       <a href="#kb">知识库</a>
       <a href="#delivery">交付方法论</a>
     </nav>
-    <a class="demo-link" href="https://youzan-i-bowlingqs-projects.vercel.app" target="_blank" rel="noopener">在线 demo <span>↗</span></a>
+    <a class="demo-link" href="https://youzan.dvlin.com" target="_blank" rel="noopener">在线 demo <span>↗</span></a>
   </div>
 </header>
 
@@ -202,7 +202,7 @@
       <span>—— 客户原话，也是这个项目要解决的核心问题</span>
     </div>
     <div class="meta">
-      <span>在线 demo <span class="mono">youzan-i-bowlingqs-projects.vercel.app</span></span>
+      <span>在线 demo <span class="mono">youzan.dvlin.com</span></span>
       <span>演示账号 <span class="mono">warehouse / buyer / admin @demo.com · demo1234</span></span>
     </div>
   </div>
@@ -324,6 +324,18 @@
       <div class="card"><h4>第 2 层归因解释</h4><p>差异抽屉里 LLM 基于第 1 层证据排序解释，降级安全、不改结论。</p></div>
     </div>
     <div class="note mono">“看看哪些快断货了，都补到 30” → 一轮内 5 张入库待复核单：米白/S +30、墨绿/M +18 …（实时显示 思考 → 查询低库存 ✓ → 逐笔登记 ✓ → 流式回答）</div>
+
+    <h3 class="sub">Agent 的工具集（底层能力）</h3>
+    <table class="t">
+      <thead><tr><th style="width:150px">工具</th><th style="width:54px">读/写</th><th>参数</th><th>作用</th><th style="width:96px">谁能用</th></tr></thead>
+      <tbody>
+        <tr><td><b>query_stock</b></td><td>读</td><td class="mono">styleNo, color, size</td><td>查某 SKU 当前库存（= posted 流水累加）。</td><td>全部</td></tr>
+        <tr><td><b>low_stock</b></td><td>读</td><td class="mono">—</td><td>列出低于安全库存（含断码）的 SKU，带 款 / 色 / 码 / 当前 / 安全。</td><td>全部</td></tr>
+        <tr><td><b>recon_summary</b></td><td>读</td><td class="mono">—</td><td>盘点对账归因汇总：盘亏毛额 / 真损失 / 可追回 / 各成因分桶。</td><td>采购 · 老板</td></tr>
+        <tr><td><b>record_move</b></td><td>写</td><td class="mono">type, styleNo, color, size, qty</td><td>登记一笔入 / 出库 → 生成待复核单（不直接落库）；一轮可多次。</td><td>仓管 · 老板</td></tr>
+      </tbody>
+    </table>
+    <p class="intro" style="font-size:14px">这些是 <span class="mono">lib/ai/tools.ts</span> 暴露给 AI 的<b>白名单工具</b>：Zod 入参（→ JSON schema 喂给模型）+ 服务端 <span class="mono">execute</span>（守恒 / 权限 / 审计在内部）。它们按角色挂载、是类型化工具层 <span class="mono">lib/actions.ts</span> 的子集，写操作只生成待复核单。盘点第 2 层归因解释 <span class="mono">explainDiff</span> 由差异抽屉按需触发，不在对话工具集内。</p>
   </div>
 </section>
 
@@ -505,7 +517,7 @@
     <div class="demo">
       <div>
         <div class="kicker" style="color:#9a917c">在线体验</div>
-        <div class="url">youzan-i-bowlingqs-projects.vercel.app</div>
+        <div class="url">youzan.dvlin.com</div>
       </div>
       <div class="acct">
         演示账号（登录页已预填，点击即登）<br>

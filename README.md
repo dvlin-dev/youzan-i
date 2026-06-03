@@ -7,7 +7,7 @@
 
 ## 🚀 在线体验
 
-**https://youzan-i-bowlingqs-projects.vercel.app**
+**https://youzan.dvlin.com**
 
 登录页已**预填演示账号**，选角色点「登录」即可：
 
