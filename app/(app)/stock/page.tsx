@@ -1,7 +1,7 @@
-import { allSkus, stockMap, levelOf } from "@/lib/db/queries";
-import { currentUser } from "@/lib/session";
+import { type SkuRow, StockBrowser } from "@/components/StockBrowser";
 import { can } from "@/lib/constants";
-import { StockBrowser, type SkuRow } from "@/components/StockBrowser";
+import { allSkus, levelOf, stockMap } from "@/lib/db/queries";
+import { currentUser } from "@/lib/session";
 
 export default async function StockPage() {
   const user = (await currentUser())!;

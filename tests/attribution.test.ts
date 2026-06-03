@@ -1,6 +1,11 @@
-import { describe, it, expect } from "vitest";
-import { attribute, bizTypeOf, type AttrCtx } from "../lib/stocktake/attribution";
+import { describe, expect, it } from "vitest";
+
 import type { Sku, StockLedger } from "../lib/db/schema";
+import {
+  type AttrCtx,
+  attribute,
+  bizTypeOf,
+} from "../lib/stocktake/attribution";
 
 // —— 构造工具：补齐字段，保持类型安全（不使用 any）——
 function led(p: Partial<StockLedger>): StockLedger {
@@ -23,12 +28,35 @@ function led(p: Partial<StockLedger>): StockLedger {
     ...p,
   };
 }
-function meta(p: Partial<Pick<Sku, "skuCode" | "styleNo" | "styleName" | "color" | "size" | "costPrice">>) {
-  return { skuCode: "X", styleNo: "AW-T", styleName: "测试款", color: "藏青", size: "M", costPrice: 9900, ...p };
+function meta(
+  p: Partial<
+    Pick<
+      Sku,
+      "skuCode" | "styleNo" | "styleName" | "color" | "size" | "costPrice"
+    >
+  >,
+) {
+  return {
+    skuCode: "X",
+    styleNo: "AW-T",
+    styleName: "测试款",
+    color: "藏青",
+    size: "M",
+    costPrice: 9900,
+    ...p,
+  };
 }
 const SNAP = "2026-05-30T16:00:00+08:00";
 function ctx(p: Partial<AttrCtx>): AttrCtx {
-  return { sku: meta({}), diff: 0, ledger: [], snapTs: SNAP, siblings: [], poOrdered: () => null, ...p };
+  return {
+    sku: meta({}),
+    diff: 0,
+    ledger: [],
+    snapTs: SNAP,
+    siblings: [],
+    poOrdered: () => null,
+    ...p,
+  };
 }
 
 describe("AI 第 1 层确定性检测器回归（6 类成因）", () => {
@@ -36,7 +64,13 @@ describe("AI 第 1 层确定性检测器回归（6 类成因）", () => {
     const a = attribute(
       ctx({
         diff: 40,
-        ledger: [led({ delta: 40, bizType: "采购到货", ts: new Date("2026-05-30T16:30:00+08:00") })],
+        ledger: [
+          led({
+            delta: 40,
+            bizType: "采购到货",
+            ts: new Date("2026-05-30T16:30:00+08:00"),
+          }),
+        ],
       }),
     );
     expect(a.bucket).toBe("transit");
@@ -50,8 +84,20 @@ describe("AI 第 1 层确定性检测器回归（6 类成因）", () => {
         sku: meta({ skuCode: "AW-T-藏青-M", color: "藏青" }),
         diff: -25,
         siblings: [
-          { skuCode: "AW-T-藏青-M", styleNo: "AW-T", color: "藏青", size: "M", diff: -25 },
-          { skuCode: "AW-T-黑-M", styleNo: "AW-T", color: "黑", size: "M", diff: 25 },
+          {
+            skuCode: "AW-T-藏青-M",
+            styleNo: "AW-T",
+            color: "藏青",
+            size: "M",
+            diff: -25,
+          },
+          {
+            skuCode: "AW-T-黑-M",
+            styleNo: "AW-T",
+            color: "黑",
+            size: "M",
+            diff: 25,
+          },
         ],
       }),
     );
@@ -78,7 +124,15 @@ describe("AI 第 1 层确定性检测器回归（6 类成因）", () => {
     const a = attribute(
       ctx({
         diff: -60,
-        ledger: [led({ delta: 90, bizType: "采购到货", qc: false, poRef: "PO-1", docNo: "IN-90" })],
+        ledger: [
+          led({
+            delta: 90,
+            bizType: "采购到货",
+            qc: false,
+            poRef: "PO-1",
+            docNo: "IN-90",
+          }),
+        ],
         poOrdered: (poRef) => (poRef === "PO-1" ? 90 : null),
       }),
     );
@@ -90,7 +144,11 @@ describe("AI 第 1 层确定性检测器回归（6 类成因）", () => {
   it("疑错发·待核实（misship）：编排款近期大额出库", () => {
     const a = attribute(
       ctx({
-        sku: meta({ skuCode: "AW2024-4408-黑-M", styleNo: "AW2024-4408", color: "黑" }),
+        sku: meta({
+          skuCode: "AW2024-4408-黑-M",
+          styleNo: "AW2024-4408",
+          color: "黑",
+        }),
         diff: -34,
         ledger: [led({ delta: -30, bizType: "销售出库", docNo: "OUT-1" })],
       }),
@@ -102,7 +160,11 @@ describe("AI 第 1 层确定性检测器回归（6 类成因）", () => {
   it("实物损耗·真损失（loss）：检测器全不命中时诚实兜底", () => {
     const a = attribute(
       ctx({
-        sku: meta({ skuCode: "AW2024-7731-黑-L", styleNo: "AW2024-7731", costPrice: 15900 }),
+        sku: meta({
+          skuCode: "AW2024-7731-黑-L",
+          styleNo: "AW2024-7731",
+          costPrice: 15900,
+        }),
         diff: -38,
         ledger: [
           led({ delta: 48, bizType: "期初", docNo: "INIT" }),
@@ -116,7 +178,14 @@ describe("AI 第 1 层确定性检测器回归（6 类成因）", () => {
   });
 
   it("bizTypeOf 覆盖全部 bucket 且各不相同", () => {
-    const buckets = ["swap", "dup", "supplier", "misship", "transit", "loss"] as const;
+    const buckets = [
+      "swap",
+      "dup",
+      "supplier",
+      "misship",
+      "transit",
+      "loss",
+    ] as const;
     const labels = buckets.map((b) => bizTypeOf(b));
     expect(new Set(labels).size).toBe(buckets.length);
     labels.forEach((l) => expect(l.startsWith("盘点")).toBe(true));

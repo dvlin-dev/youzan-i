@@ -1,17 +1,25 @@
-import { z } from "zod";
 import type OpenAI from "openai";
-import { allSkus } from "@/lib/db/queries";
+import { z } from "zod";
+
 import { type Role } from "@/lib/constants";
+import { allSkus } from "@/lib/db/queries";
 import type { SessionUser } from "@/lib/session";
+
 import { aiEnabled, getOpenAIClient } from "./client";
-import { getToolSpecs, type RecordedMove } from "./tools";
+import { type RecordedMove, getToolSpecs } from "./tools";
 
 export { aiEnabled };
 
 /** 流式事件：前端据此实时渲染「思考 + 工具调用 + 回答」。 */
 export type CopilotEvent =
   | { t: "thought"; delta: string }
-  | { t: "tool"; id: string; name?: string; label?: string; status: "running" | "done" }
+  | {
+      t: "tool";
+      id: string;
+      name?: string;
+      label?: string;
+      status: "running" | "done";
+    }
   | { t: "text"; delta: string }
   | { t: "final"; mutated: boolean; docs: string[]; text: string }
   | { t: "error"; message: string };
@@ -20,7 +28,12 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** 工具调用的人类可读标签（展示在过程时间线上）。 */
 function toolLabel(name: string, args: Record<string, unknown>): string {
-  const sku = [args.styleNo, args.color && args.size ? `${args.color}/${args.size}` : args.color].filter(Boolean).join(" ");
+  const sku = [
+    args.styleNo,
+    args.color && args.size ? `${args.color}/${args.size}` : args.color,
+  ]
+    .filter(Boolean)
+    .join(" ");
   switch (name) {
     case "query_stock":
       return `查询库存 ${sku}`.trim();
@@ -34,7 +47,9 @@ function toolLabel(name: string, args: Record<string, unknown>): string {
       return `${t} ${sku} ${sign}${args.qty}`.trim();
     }
     case "query_sql": {
-      const q = String(args.sql ?? "").replace(/\s+/g, " ").trim();
+      const q = String(args.sql ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
       return "只读查询 " + (q.length > 48 ? q.slice(0, 48) + "…" : q);
     }
     default:
@@ -44,15 +59,25 @@ function toolLabel(name: string, args: Record<string, unknown>): string {
 
 async function catalog() {
   const skus = await allSkus();
-  const byStyle = new Map<string, { name: string; colors: Set<string>; sizes: Set<string> }>();
+  const byStyle = new Map<
+    string,
+    { name: string; colors: Set<string>; sizes: Set<string> }
+  >();
   for (const s of skus) {
-    const e = byStyle.get(s.styleNo) ?? { name: s.styleName, colors: new Set(), sizes: new Set() };
+    const e = byStyle.get(s.styleNo) ?? {
+      name: s.styleName,
+      colors: new Set(),
+      sizes: new Set(),
+    };
     e.colors.add(s.color);
     e.sizes.add(s.size);
     byStyle.set(s.styleNo, e);
   }
   return [...byStyle.entries()]
-    .map(([no, e]) => `${no} ${e.name}｜色:${[...e.colors].join("/")}｜码:${[...e.sizes].join("/")}`)
+    .map(
+      ([no, e]) =>
+        `${no} ${e.name}｜色:${[...e.colors].join("/")}｜码:${[...e.sizes].join("/")}`,
+    )
     .join("\n");
 }
 
@@ -120,7 +145,10 @@ type ChatMsg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
  * 这里手写循环，得以把 思考(reasoning_content) / 回答(content) / 工具调用 全部实时 yield 出去；
  * 工具仍是 `lib/ai/tools.ts` 的类型化工具（守恒 + RBAC + 审计 + 待复核审批闸），架构不变。
  */
-export async function* streamCopilot(message: string, user: SessionUser): AsyncGenerator<CopilotEvent> {
+export async function* streamCopilot(
+  message: string,
+  user: SessionUser,
+): AsyncGenerator<CopilotEvent> {
   const role: Role = user.role;
   if (!aiEnabled()) {
     yield {
@@ -143,13 +171,29 @@ export async function* streamCopilot(message: string, user: SessionUser): AsyncG
   const skus = await allSkus();
   const skuSet = new Set(skus.map((s) => s.skuCode));
   const recorded: RecordedMove[] = [];
-  const specs = getToolSpecs({ role, skus, skuSet, recorded, actor: { id: user.id, name: user.name } });
+  const specs = getToolSpecs({
+    role,
+    skus,
+    skuSet,
+    recorded,
+    actor: { id: user.id, name: user.name },
+  });
   const byName = new Map(specs.map((s) => [s.name, s]));
-  const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = specs.map((s) => ({
-    type: "function",
-    function: { name: s.name, description: s.description, parameters: z.toJSONSchema(s.schema) as Record<string, unknown> },
-  }));
-  const effort = (process.env.OPENAI_REASONING_EFFORT ?? "medium") as "minimal" | "low" | "medium" | "high";
+  const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = specs.map(
+    (s) => ({
+      type: "function",
+      function: {
+        name: s.name,
+        description: s.description,
+        parameters: z.toJSONSchema(s.schema) as Record<string, unknown>,
+      },
+    }),
+  );
+  const effort = (process.env.OPENAI_REASONING_EFFORT ?? "medium") as
+    | "minimal"
+    | "low"
+    | "medium"
+    | "high";
   const cat = await catalog();
   const messages: ChatMsg[] = [
     { role: "system", content: buildInstructions(role, cat) },
@@ -169,7 +213,8 @@ export async function* streamCopilot(message: string, user: SessionUser): AsyncG
       });
 
       let content = "";
-      const calls: Record<number, { id: string; name: string; args: string }> = {};
+      const calls: Record<number, { id: string; name: string; args: string }> =
+        {};
       let finish: string | undefined;
 
       for await (const chunk of stream) {
@@ -178,9 +223,14 @@ export async function* streamCopilot(message: string, user: SessionUser): AsyncG
         const d = (ch.delta ?? {}) as {
           content?: string | null;
           reasoning_content?: string | null;
-          tool_calls?: { index: number; id?: string; function?: { name?: string; arguments?: string } }[];
+          tool_calls?: {
+            index: number;
+            id?: string;
+            function?: { name?: string; arguments?: string };
+          }[];
         };
-        if (d.reasoning_content) yield { t: "thought", delta: String(d.reasoning_content) };
+        if (d.reasoning_content)
+          yield { t: "thought", delta: String(d.reasoning_content) };
         if (d.content) {
           content += d.content;
           yield { t: "text", delta: d.content };
@@ -202,7 +252,11 @@ export async function* streamCopilot(message: string, user: SessionUser): AsyncG
         messages.push({
           role: "assistant",
           content: content || null,
-          tool_calls: callList.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.args } })),
+          tool_calls: callList.map((c) => ({
+            id: c.id,
+            type: "function",
+            function: { name: c.name, arguments: c.args },
+          })),
         });
         const parsed = callList.map((c) => {
           let a: Record<string, unknown> = {};
@@ -212,14 +266,23 @@ export async function* streamCopilot(message: string, user: SessionUser): AsyncG
           return { c, a };
         });
         // 先全部显示「进行中」，再逐个执行并标记完成
-        for (const { c, a } of parsed) yield { t: "tool", id: c.id, name: c.name, label: toolLabel(c.name, a), status: "running" };
+        for (const { c, a } of parsed)
+          yield {
+            t: "tool",
+            id: c.id,
+            name: c.name,
+            label: toolLabel(c.name, a),
+            status: "running",
+          };
         for (const { c, a } of parsed) {
           const spec = byName.get(c.name);
           let out: string;
           if (!spec) out = `未知工具 ${c.name}`;
           else {
             const pr = spec.schema.safeParse(a);
-            out = pr.success ? await spec.execute(pr.data) : `参数有误：${pr.error.issues?.[0]?.message ?? "invalid"}`;
+            out = pr.success
+              ? await spec.execute(pr.data)
+              : `参数有误：${pr.error.issues?.[0]?.message ?? "invalid"}`;
           }
           yield { t: "tool", id: c.id, status: "done" };
           messages.push({ role: "tool", tool_call_id: c.id, content: out });
@@ -227,11 +290,24 @@ export async function* streamCopilot(message: string, user: SessionUser): AsyncG
         continue; // 进入下一轮，让模型基于工具结果继续
       }
 
-      yield { t: "final", mutated: recorded.length > 0, docs: recorded.map((r) => r.docNo), text: content };
+      yield {
+        t: "final",
+        mutated: recorded.length > 0,
+        docs: recorded.map((r) => r.docNo),
+        text: content,
+      };
       return;
     }
-    yield { t: "final", mutated: recorded.length > 0, docs: recorded.map((r) => r.docNo), text: "（步骤较多已暂停，可重试或把指令拆细一些。）" };
+    yield {
+      t: "final",
+      mutated: recorded.length > 0,
+      docs: recorded.map((r) => r.docNo),
+      text: "（步骤较多已暂停，可重试或把指令拆细一些。）",
+    };
   } catch (e) {
-    yield { t: "error", message: "AI 调用出错：" + errMsg(e) + "。可改用页面操作。" };
+    yield {
+      t: "error",
+      message: "AI 调用出错：" + errMsg(e) + "。可改用页面操作。",
+    };
   }
 }

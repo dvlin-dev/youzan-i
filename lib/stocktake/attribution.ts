@@ -1,6 +1,12 @@
 import type { Sku, StockLedger } from "@/lib/db/schema";
 
-export type Bucket = "swap" | "dup" | "supplier" | "misship" | "transit" | "loss";
+export type Bucket =
+  | "swap"
+  | "dup"
+  | "supplier"
+  | "misship"
+  | "transit"
+  | "loss";
 
 export type Attribution = {
   bucket: Bucket;
@@ -17,19 +23,29 @@ export type Attribution = {
   pair?: string; // 串色配对 SKU
 };
 
-type SkuMeta = Pick<Sku, "skuCode" | "styleNo" | "styleName" | "color" | "size" | "costPrice">;
+type SkuMeta = Pick<
+  Sku,
+  "skuCode" | "styleNo" | "styleName" | "color" | "size" | "costPrice"
+>;
 
 export type AttrCtx = {
   sku: SkuMeta;
   diff: number;
   ledger: StockLedger[]; // 该 SKU 的流水（含 posted）
   snapTs: Date | string;
-  siblings: { skuCode: string; styleNo: string; color: string; size: string; diff: number }[];
+  siblings: {
+    skuCode: string;
+    styleNo: string;
+    color: string;
+    size: string;
+    diff: number;
+  }[];
   poOrdered: (poRef: string, skuCode: string) => number | null;
 };
 
 const ms = (x: Date | string) => new Date(x).getTime();
-const hm = (x: Date | string) => new Date(x).toISOString().slice(5, 16).replace("T", " ");
+const hm = (x: Date | string) =>
+  new Date(x).toISOString().slice(5, 16).replace("T", " ");
 
 /**
  * 第 1 层归因：确定性检测器（权威）。逐项排查只对系统真有的证据做关联——
@@ -54,14 +70,21 @@ export function attribute(ctx: AttrCtx): Attribution {
       recover: false,
       fixLabel: "纳入盘点·归零",
       reason: `盘点账面快照（${hm(snapTs)}）之后，有一笔到货 ${late.docNo}（${hm(late.ts)}，+${late.delta}）才入账——货已在架、也被盘到，只是流水晚于快照。这不是真差异。`,
-      ev: [`快照时点 ${hm(snapTs)}`, `晚到流水 ${late.docNo} @ ${hm(late.ts)}（+${late.delta}）`],
+      ev: [
+        `快照时点 ${hm(snapTs)}`,
+        `晚到流水 ${late.docNo} @ ${hm(late.ts)}（+${late.delta}）`,
+      ],
       sug: "把该到货单纳入本次盘点（或前移快照时点）即可归零，无需记盘亏。",
     };
   }
 
   // —— 串色：同款号、等量反向差异 ——
   const sib = siblings.find(
-    (s) => s.skuCode !== sku.skuCode && s.styleNo === sku.styleNo && s.diff === -diff && diff !== 0,
+    (s) =>
+      s.skuCode !== sku.skuCode &&
+      s.styleNo === sku.styleNo &&
+      s.diff === -diff &&
+      diff !== 0,
   );
   if (sib) {
     const n = Math.abs(diff);
@@ -90,7 +113,9 @@ export function attribute(ctx: AttrCtx): Attribution {
 
   // —— 重复入库：同到货单号两笔 ——
   const ins = posted.filter((l) => l.delta > 0 && l.bizType === "采购到货");
-  const dupDoc = ins.map((l) => l.docNo).find((dno, i, a) => a.indexOf(dno) !== i);
+  const dupDoc = ins
+    .map((l) => l.docNo)
+    .find((dno, i, a) => a.indexOf(dno) !== i);
   if (diff < 0 && dupDoc) {
     const dups = ins.filter((l) => l.docNo === dupDoc);
     return {
@@ -121,7 +146,11 @@ export function attribute(ctx: AttrCtx): Attribution {
         recover: true,
         fixLabel: "记盘亏·标记索赔",
         reason: `收货单 ${noqc.docNo} 按采购单 ${noqc.poRef} 应收 ${ordered} 件照单全收（+${noqc.delta}），却未点数 / 未质检。实盘短少 ${Math.abs(diff)} 件，高度怀疑供应商少发、收货没核实。`,
-        ev: [`收货 ${noqc.docNo}　+${noqc.delta}`, `采购单 ${noqc.poRef} 应收 ${ordered}（收 = 应收）`, "收货标记：未质检 / 未点数"],
+        ev: [
+          `收货 ${noqc.docNo}　+${noqc.delta}`,
+          `采购单 ${noqc.poRef} 应收 ${ordered}（收 = 应收）`,
+          "收货标记：未质检 / 未点数",
+        ],
         sug: "记盘亏并向供应商索赔 / 补发；并把该供应商收货改为强制点数。金额大概率可追回。",
       };
     }
@@ -130,7 +159,10 @@ export function attribute(ctx: AttrCtx): Attribution {
   // —— 疑错发：近期大额销售出库（仅对编排款给假设，避免误伤）——
   if (diff < 0 && sku.styleNo === "AW2024-4408") {
     const big = posted.find(
-      (l) => l.delta < 0 && l.bizType === "销售出库" && Math.abs(l.delta) >= Math.abs(diff) * 0.7,
+      (l) =>
+        l.delta < 0 &&
+        l.bizType === "销售出库" &&
+        Math.abs(l.delta) >= Math.abs(diff) * 0.7,
     );
     if (big) {
       return {
@@ -142,7 +174,10 @@ export function attribute(ctx: AttrCtx): Attribution {
         recover: true,
         fixLabel: "记盘亏·待核实",
         reason: `近期有一笔较大销售出库 ${big.docNo}（${hm(big.ts)}，${big.delta}）。实盘短少 ${Math.abs(diff)} 件，疑似该单实发多于开单（错发 / 多发）。`,
-        ev: [`近期大额出库 ${big.docNo}　${big.delta}　@ ${hm(big.ts)}`, "无其它系统解释"],
+        ev: [
+          `近期大额出库 ${big.docNo}　${big.delta}　@ ${hm(big.ts)}`,
+          "无其它系统解释",
+        ],
         sug: "核对该出库单实发数与客户签收；若确为多发，向客户追回或补开单。先记盘亏待核实。",
       };
     }
@@ -161,7 +196,11 @@ export function attribute(ctx: AttrCtx): Attribution {
     recover: false,
     fixLabel: "记盘亏·实物损耗",
     reason: `该 SKU 流水完全自洽（库存 = 流水累加），检测器逐项排查（串色 / 重复 / 供应商 / 在途）均未命中——系统侧给不出解释，差异落在实物侧。${highVal ? "且为高价值小件，失窃风险偏高。" : ""}`,
-    ev: ["流水自洽、无异常录入", "无配对串色、无重复单、无照单全收", "非快照时点错位"],
+    ev: [
+      "流水自洽、无异常录入",
+      "无配对串色、无重复单、无照单全收",
+      "非快照时点错位",
+    ],
     sug: `系统不编原因。建议：${highVal ? "调取 5/10–5/30 该货位监控、" : ""}安排该货位复盘（排除错放邻格），先记盘亏待老板复核。这部分是真实净损失。`,
   };
 }

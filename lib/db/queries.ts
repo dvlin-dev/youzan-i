@@ -1,17 +1,18 @@
+import { and, asc, desc, eq, sql } from "drizzle-orm";
+
 import { db } from "./client";
 import {
-  sku,
-  stockLedger,
-  moveDraft,
-  purchaseOrder,
-  poLine,
-  stocktake,
-  stocktakeCount,
-  type StockLedger,
   type MoveDraft,
   type Sku,
+  type StockLedger,
+  moveDraft,
+  poLine,
+  purchaseOrder,
+  sku,
+  stockLedger,
+  stocktake,
+  stocktakeCount,
 } from "./schema";
-import { and, eq, sql, asc, desc } from "drizzle-orm";
 
 export async function allSkus(): Promise<Sku[]> {
   return db.select().from(sku);
@@ -55,7 +56,9 @@ export async function pendingDocs(): Promise<Record<string, MoveDraft[]>> {
 }
 
 /** 某采购单各 SKU 的「已到货量」= 该单 posted 入库流水累加（单一真相）。 */
-export async function receivedByPo(poNo: string): Promise<Record<string, number>> {
+export async function receivedByPo(
+  poNo: string,
+): Promise<Record<string, number>> {
   const rows = await db
     .select({
       skuCode: stockLedger.skuCode,
@@ -70,13 +73,22 @@ export async function receivedByPo(poNo: string): Promise<Record<string, number>
 }
 
 export async function listPos() {
-  const pos = await db.select().from(purchaseOrder).orderBy(desc(purchaseOrder.createdAt));
+  const pos = await db
+    .select()
+    .from(purchaseOrder)
+    .orderBy(desc(purchaseOrder.createdAt));
   const lines = await db.select().from(poLine);
-  return pos.map((p) => ({ ...p, lines: lines.filter((l) => l.poNo === p.poNo) }));
+  return pos.map((p) => ({
+    ...p,
+    lines: lines.filter((l) => l.poNo === p.poNo),
+  }));
 }
 
 export async function getPo(poNo: string) {
-  const [p] = await db.select().from(purchaseOrder).where(eq(purchaseOrder.poNo, poNo));
+  const [p] = await db
+    .select()
+    .from(purchaseOrder)
+    .where(eq(purchaseOrder.poNo, poNo));
   if (!p) return null;
   const lines = await db.select().from(poLine).where(eq(poLine.poNo, poNo));
   return { ...p, lines };

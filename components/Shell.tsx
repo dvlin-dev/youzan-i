@@ -2,12 +2,14 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Icon } from "./icons";
-import { ToastProvider } from "./toast";
-import { Copilot } from "./Copilot";
-import { switchRole, logoutAction } from "@/lib/actions";
+
+import { logoutAction, switchRole } from "@/lib/actions";
 import { ROLE_LABEL, type Role } from "@/lib/constants";
 import type { SessionUser } from "@/lib/session";
+
+import { Copilot } from "./Copilot";
+import { Icon } from "./icons";
+import { ToastProvider } from "./toast";
 
 const NAV: Record<Role, [string, string, string][]> = {
   warehouse: [
@@ -57,7 +59,9 @@ export function Shell({
   return (
     <ToastProvider>
       <div className={"app" + (navOpen ? " nav-open" : "")}>
-        {navOpen && <div className="nav-scrim" onClick={() => setNavOpen(false)} />}
+        {navOpen && (
+          <div className="nav-scrim" onClick={() => setNavOpen(false)} />
+        )}
         <aside className={"sidebar" + (navOpen ? " open" : "")}>
           <div className="brand">
             <span className="logo">
@@ -78,13 +82,17 @@ export function Shell({
             >
               <Icon name={icon} />
               <span>{label}</span>
-              {href === "/move" && pendingCount > 0 && <span className="badge-n">{pendingCount}</span>}
+              {href === "/move" && pendingCount > 0 && (
+                <span className="badge-n">{pendingCount}</span>
+              )}
             </Link>
           ))}
 
           <div className="sb-spacer" />
           <div className="userbox">
-            <div className="nav-label" style={{ padding: "0 4px 8px" }}>切换演示角色</div>
+            <div className="nav-label" style={{ padding: "0 4px 8px" }}>
+              切换演示角色
+            </div>
             <div className="roles">
               {(["warehouse", "buyer", "admin"] as Role[]).map((r) => (
                 <button

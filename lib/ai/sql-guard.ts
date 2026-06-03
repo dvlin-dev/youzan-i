@@ -19,20 +19,62 @@ export type SqlGuardResult =
 
 /** 写 / DDL / 会话 / 事务 / 取数副作用关键字——出现即拒（整词匹配）。 */
 const FORBIDDEN_KEYWORDS = [
-  "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "TRUNCATE",
-  "GRANT", "REVOKE", "COMMENT", "REINDEX", "VACUUM", "ANALYZE", "CLUSTER",
-  "COPY", "MERGE", "CALL", "DO", "EXECUTE", "PREPARE", "DEALLOCATE",
-  "LISTEN", "NOTIFY", "UNLISTEN", "LOCK", "SET", "RESET", "BEGIN", "START",
-  "COMMIT", "ROLLBACK", "SAVEPOINT", "REFRESH", "IMPORT", "INTO", "SECURITY",
+  "INSERT",
+  "UPDATE",
+  "DELETE",
+  "DROP",
+  "ALTER",
+  "CREATE",
+  "TRUNCATE",
+  "GRANT",
+  "REVOKE",
+  "COMMENT",
+  "REINDEX",
+  "VACUUM",
+  "ANALYZE",
+  "CLUSTER",
+  "COPY",
+  "MERGE",
+  "CALL",
+  "DO",
+  "EXECUTE",
+  "PREPARE",
+  "DEALLOCATE",
+  "LISTEN",
+  "NOTIFY",
+  "UNLISTEN",
+  "LOCK",
+  "SET",
+  "RESET",
+  "BEGIN",
+  "START",
+  "COMMIT",
+  "ROLLBACK",
+  "SAVEPOINT",
+  "REFRESH",
+  "IMPORT",
+  "INTO",
+  "SECURITY",
 ];
 
 /** 危险函数：文件 / 网络 / 睡眠(DoS) / 改配置——只读角色已物理拒写，这里给清晰报错并挡拖库。 */
 const BLOCKED_FUNCTIONS = [
   // pg_sleep 全家（pg_sleep / pg_sleep_for / pg_sleep_until）——\b 边界不含后缀，逐个列。
-  "pg_sleep", "pg_sleep_for", "pg_sleep_until",
-  "pg_read_file", "pg_read_binary_file", "pg_ls_dir", "pg_stat_file",
-  "lo_import", "lo_export", "dblink", "pg_terminate_backend", "pg_cancel_backend",
-  "pg_reload_conf", "set_config", "pg_logical_emit_message",
+  "pg_sleep",
+  "pg_sleep_for",
+  "pg_sleep_until",
+  "pg_read_file",
+  "pg_read_binary_file",
+  "pg_ls_dir",
+  "pg_stat_file",
+  "lo_import",
+  "lo_export",
+  "dblink",
+  "pg_terminate_backend",
+  "pg_cancel_backend",
+  "pg_reload_conf",
+  "set_config",
+  "pg_logical_emit_message",
 ];
 
 /** 角色相关的表/列脱敏：与 can.cost / can.po / can.recon 对齐，让自由 SQL 不绕过页面级 RBAC。 */
@@ -40,13 +82,27 @@ function deniedIdentifiers(role: Role): string[] {
   // 任何角色都不可读：用户表 / 口令哈希 / 系统口令目录 / **统计目录（pg_stats 暴露列采样值）**。
   // 统计目录会泄露 most_common_vals / histogram_bounds 等真实样本值，且 DB 虽按列权限过滤，仍整体挡掉更稳。
   const base = [
-    "app_user", "password_hash", "pg_authid", "pg_shadow",
-    "pg_stats", "pg_statistic", "pg_stats_ext", "pg_stats_ext_exprs",
-    "pg_statistic_ext", "pg_statistic_ext_data",
+    "app_user",
+    "password_hash",
+    "pg_authid",
+    "pg_shadow",
+    "pg_stats",
+    "pg_statistic",
+    "pg_stats_ext",
+    "pg_stats_ext_exprs",
+    "pg_statistic_ext",
+    "pg_statistic_ext_data",
   ];
   if (role === "warehouse") {
     // 仓管：看不到成本价、采购单、盘点（与 can.cost/can.po/can.recon = false 对齐）
-    return [...base, "cost_price", "purchase_order", "po_line", "stocktake", "stocktake_count"];
+    return [
+      ...base,
+      "cost_price",
+      "purchase_order",
+      "po_line",
+      "stocktake",
+      "stocktake_count",
+    ];
   }
   return base;
 }
@@ -55,7 +111,11 @@ function deniedIdentifiers(role: Role): string[] {
  * 单遍扫描：把字符串字面量 / 美元引用体替换为空白、保留双引号标识符内容，
  * 同时记录是否含注释、字面量外的分号数。返回的 `code` 仅用于关键字/标识符判定，**不可执行**。
  */
-function scan(sql: string): { code: string; hasComment: boolean; semicolons: number } {
+function scan(sql: string): {
+  code: string;
+  hasComment: boolean;
+  semicolons: number;
+} {
   let code = "";
   let hasComment = false;
   let semicolons = 0;
@@ -79,8 +139,16 @@ function scan(sql: string): { code: string; hasComment: boolean; semicolons: num
       i += 2;
       let depth = 1;
       while (i < n && depth > 0) {
-        if (sql[i] === "/" && sql[i + 1] === "*") { depth++; i += 2; continue; }
-        if (sql[i] === "*" && sql[i + 1] === "/") { depth--; i += 2; continue; }
+        if (sql[i] === "/" && sql[i + 1] === "*") {
+          depth++;
+          i += 2;
+          continue;
+        }
+        if (sql[i] === "*" && sql[i + 1] === "/") {
+          depth--;
+          i += 2;
+          continue;
+        }
         i++;
       }
       continue;
@@ -89,8 +157,14 @@ function scan(sql: string): { code: string; hasComment: boolean; semicolons: num
     if (c === "'") {
       i++;
       while (i < n) {
-        if (sql[i] === "'" && sql[i + 1] === "'") { i += 2; continue; }
-        if (sql[i] === "'") { i++; break; }
+        if (sql[i] === "'" && sql[i + 1] === "'") {
+          i += 2;
+          continue;
+        }
+        if (sql[i] === "'") {
+          i++;
+          break;
+        }
         i++;
       }
       code += " ";
@@ -101,9 +175,18 @@ function scan(sql: string): { code: string; hasComment: boolean; semicolons: num
       code += '"';
       i++;
       while (i < n) {
-        if (sql[i] === '"' && sql[i + 1] === '"') { code += '""'; i += 2; continue; }
-        if (sql[i] === '"') { code += '"'; i++; break; }
-        code += sql[i]; i++;
+        if (sql[i] === '"' && sql[i + 1] === '"') {
+          code += '""';
+          i += 2;
+          continue;
+        }
+        if (sql[i] === '"') {
+          code += '"';
+          i++;
+          break;
+        }
+        code += sql[i];
+        i++;
       }
       continue;
     }
@@ -113,14 +196,23 @@ function scan(sql: string): { code: string; hasComment: boolean; semicolons: num
       if (m) {
         const tag = m[0];
         const end = sql.indexOf(tag, i + tag.length);
-        if (end === -1) { code += " "; i = n; continue; }
+        if (end === -1) {
+          code += " ";
+          i = n;
+          continue;
+        }
         i = end + tag.length;
         code += " ";
         continue;
       }
     }
 
-    if (c === ";") { semicolons++; code += ";"; i++; continue; }
+    if (c === ";") {
+      semicolons++;
+      code += ";";
+      i++;
+      continue;
+    }
     code += c;
     i++;
   }
@@ -139,7 +231,10 @@ export function guardReadonlySql(raw: string, role: Role): SqlGuardResult {
   const { code, hasComment } = scan(trimmed);
 
   if (hasComment) {
-    return { ok: false, reason: "不允许 SQL 注释（-- 或 /* */），以防注释绕过校验" };
+    return {
+      ok: false,
+      reason: "不允许 SQL 注释（-- 或 /* */），以防注释绕过校验",
+    };
   }
 
   // 去掉单个结尾分号；其余分号 = 多语句
@@ -151,13 +246,19 @@ export function guardReadonlySql(raw: string, role: Role): SqlGuardResult {
   // 必须以 SELECT 或 WITH 开头（允许前导空白与括号）
   const head = body.replace(/^[\s(]+/, "").toUpperCase();
   if (!/^SELECT\b/.test(head) && !/^WITH\b/.test(head)) {
-    return { ok: false, reason: "只允许只读查询：语句须以 SELECT 或 WITH 开头" };
+    return {
+      ok: false,
+      reason: "只允许只读查询：语句须以 SELECT 或 WITH 开头",
+    };
   }
 
   const upper = code.toUpperCase();
   for (const kw of FORBIDDEN_KEYWORDS) {
     if (new RegExp(`\\b${kw}\\b`).test(upper)) {
-      return { ok: false, reason: `不允许的关键字 ${kw}：query_sql 只读，写/DDL/会话语句一律拒绝` };
+      return {
+        ok: false,
+        reason: `不允许的关键字 ${kw}：query_sql 只读，写/DDL/会话语句一律拒绝`,
+      };
     }
   }
   // 行级锁 FOR UPDATE / FOR SHARE
@@ -168,7 +269,10 @@ export function guardReadonlySql(raw: string, role: Role): SqlGuardResult {
   const lower = code.toLowerCase();
   for (const fn of BLOCKED_FUNCTIONS) {
     if (new RegExp(`\\b${fn}\\b`).test(lower)) {
-      return { ok: false, reason: `不允许的函数 ${fn}（文件/网络/睡眠/改配置类）` };
+      return {
+        ok: false,
+        reason: `不允许的函数 ${fn}（文件/网络/睡眠/改配置类）`,
+      };
     }
   }
 

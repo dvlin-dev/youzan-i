@@ -7,10 +7,34 @@ export const ROLE_LABEL: Record<Role, string> = {
 };
 
 /** 三个内置演示账号（登录页预填、点击即登）。 */
-export const DEMO_USERS: { id: string; name: string; email: string; password: string; role: Role }[] = [
-  { id: "u_wh", name: "仓管小李", email: "warehouse@demo.com", password: "demo1234", role: "warehouse" },
-  { id: "u_by", name: "采购王姐", email: "buyer@demo.com", password: "demo1234", role: "buyer" },
-  { id: "u_ad", name: "陈总", email: "admin@demo.com", password: "demo1234", role: "admin" },
+export const DEMO_USERS: {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  role: Role;
+}[] = [
+  {
+    id: "u_wh",
+    name: "仓管小李",
+    email: "warehouse@demo.com",
+    password: "demo1234",
+    role: "warehouse",
+  },
+  {
+    id: "u_by",
+    name: "采购王姐",
+    email: "buyer@demo.com",
+    password: "demo1234",
+    role: "buyer",
+  },
+  {
+    id: "u_ad",
+    name: "陈总",
+    email: "admin@demo.com",
+    password: "demo1234",
+    role: "admin",
+  },
 ];
 
 export const SIZE_ORDER = ["S", "M", "L", "XL", "2XL"];

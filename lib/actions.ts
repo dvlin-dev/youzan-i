@@ -1,21 +1,35 @@
 "use server";
 
-import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { db } from "./db/client";
-import { sku, poLine, purchaseOrder, stocktake, stocktakeCount, type Sku } from "./db/schema";
-import { insertRows } from "./db/ledger";
-import { insertDraft, getDraft, deleteDraft, getDraftsByPo, postDraftAtomic } from "./db/draft";
-import { stockMap, getPo, ledgerOf, receivedByPo } from "./db/queries";
-import { requireUser } from "./session";
-import { signIn, signOut } from "./auth";
-import { can, DEMO_USERS, type Role } from "./constants";
-import { loadStocktakeView } from "./stocktake/engine";
-import { bizTypeOf } from "./stocktake/attribution";
-import { explainAttribution } from "./ai/explain";
+import { z } from "zod";
+
 import { aiEnabled } from "./ai/client";
+import { explainAttribution } from "./ai/explain";
+import { signIn, signOut } from "./auth";
+import { DEMO_USERS, type Role, can } from "./constants";
+import { db } from "./db/client";
+import {
+  deleteDraft,
+  getDraft,
+  getDraftsByPo,
+  insertDraft,
+  postDraftAtomic,
+} from "./db/draft";
+import { insertRows } from "./db/ledger";
+import { getPo, ledgerOf, receivedByPo, stockMap } from "./db/queries";
+import {
+  type Sku,
+  poLine,
+  purchaseOrder,
+  sku,
+  stocktake,
+  stocktakeCount,
+} from "./db/schema";
 import { seed } from "./db/seed";
+import { requireUser } from "./session";
+import { bizTypeOf } from "./stocktake/attribution";
+import { loadStocktakeView } from "./stocktake/engine";
 
 type Result = { ok: boolean; msg: string; docNo?: string };
 
@@ -28,19 +42,23 @@ function docNo(type: string) {
   return `${type}-${ymd()}-${String(Date.now()).slice(-4)}${Math.random().toString(36).slice(2, 4)}`;
 }
 function revalidateAll() {
-  for (const p of ["/dashboard", "/stock", "/move", "/purchase", "/stocktake"]) revalidatePath(p);
+  for (const p of ["/dashboard", "/stock", "/move", "/purchase", "/stocktake"])
+    revalidatePath(p);
 }
 
 const MoveInput = z.object({
   type: z.enum(["IN", "OUT"]),
-  entries: z.array(z.object({ skuCode: z.string(), qty: z.number().int().positive() })).min(1),
+  entries: z
+    .array(z.object({ skuCode: z.string(), qty: z.number().int().positive() }))
+    .min(1),
 });
 export type MoveInput = z.infer<typeof MoveInput>;
 
 /** 出入库：生成待复核流水（不直接入账）。出库不为负（守恒）。 */
 export async function submitMove(raw: MoveInput): Promise<Result> {
   const u = await requireUser();
-  if (!can.move(u.role)) return { ok: false, msg: "无权录入出入库（数据层拦截）" };
+  if (!can.move(u.role))
+    return { ok: false, msg: "无权录入出入库（数据层拦截）" };
   const input = MoveInput.parse(raw);
   if (input.type === "OUT") {
     const sm = await stockMap();
@@ -83,7 +101,8 @@ export async function reviewDoc(doc: string): Promise<Result> {
     // 被守恒拦截：定位首个会打穿库存的 SKU，给出可读提示
     const sm = await stockMap();
     const need = new Map<string, number>();
-    for (const r of rows) need.set(r.skuCode, (need.get(r.skuCode) ?? 0) + r.delta);
+    for (const r of rows)
+      need.set(r.skuCode, (need.get(r.skuCode) ?? 0) + r.delta);
     let msg = "复核未通过：库存守恒校验失败（请先驳回或调整）";
     for (const [code, dlt] of need) {
       if ((sm[code] ?? 0) + dlt < 0) {
@@ -122,12 +141,18 @@ async function syncPoState(poNo: string) {
   let any = false;
   for (const l of po.lines) {
     const capped = Math.min(Math.max(0, recv[l.skuCode] ?? 0), l.ordered);
-    await db.update(poLine).set({ received: capped }).where(eq(poLine.id, l.id));
+    await db
+      .update(poLine)
+      .set({ received: capped })
+      .where(eq(poLine.id, l.id));
     if (capped < l.ordered) allDone = false;
     if (capped > 0) any = true;
   }
   const status = allDone ? "已入库" : any ? "部分到货" : po.status;
-  await db.update(purchaseOrder).set({ status }).where(eq(purchaseOrder.poNo, poNo));
+  await db
+    .update(purchaseOrder)
+    .set({ status })
+    .where(eq(purchaseOrder.poNo, poNo));
 }
 
 /**
@@ -139,7 +164,8 @@ export async function receivePO(poNo: string): Promise<Result> {
   if (!can.po(u.role)) return { ok: false, msg: "无权操作采购单" };
   const po = await getPo(poNo);
   if (!po) return { ok: false, msg: "采购单不存在" };
-  if (!["已下单", "部分到货"].includes(po.status)) return { ok: false, msg: "当前状态不可收货" };
+  if (!["已下单", "部分到货"].includes(po.status))
+    return { ok: false, msg: "当前状态不可收货" };
   if ((await getDraftsByPo(poNo)).length)
     return { ok: false, msg: "该采购单已有待复核的到货单，请先复核或驳回" };
   const doc = docNo("IN");
@@ -158,11 +184,20 @@ export async function receivePO(poNo: string): Promise<Result> {
   if (!rows.length) return { ok: false, msg: "没有待收货明细" };
   await insertDraft(rows);
   revalidateAll();
-  return { ok: true, msg: `${poNo} 登记到货，生成 ${doc}（待复核，复核入账后才更新到货进度）`, docNo: doc };
+  return {
+    ok: true,
+    msg: `${poNo} 登记到货，生成 ${doc}（待复核，复核入账后才更新到货进度）`,
+    docNo: doc,
+  };
 }
 
 /** 盘点过账：按归因追加盘盈/盘亏流水（串色成对），库存派生归零。仅老板。 */
-async function postRows(skuCodes: string[], reviewer: string, pdNo: string, counter: string) {
+async function postRows(
+  skuCodes: string[],
+  reviewer: string,
+  pdNo: string,
+  counter: string,
+) {
   const view = await loadStocktakeView();
   if (!view) return 0;
   const byKey = new Map(view.rows.map((r) => [r.skuCode, r]));
@@ -204,12 +239,23 @@ export async function adoptStocktakeRow(skuCode: string): Promise<Result> {
   if (!can.postStocktake(u.role)) return { ok: false, msg: "仅老板可过账" };
   const view = await loadStocktakeView();
   if (!view) return { ok: false, msg: "无盘点单" };
-  const n = await postRows([skuCode], u.name, view.stocktake.pdNo, view.stocktake.counter);
+  const n = await postRows(
+    [skuCode],
+    u.name,
+    view.stocktake.pdNo,
+    view.stocktake.counter,
+  );
   const left = await loadStocktakeView();
   if (left && left.rows.every((r) => r.resolved))
-    await db.update(stocktake).set({ status: "已过账" }).where(eq(stocktake.pdNo, left.stocktake.pdNo));
+    await db
+      .update(stocktake)
+      .set({ status: "已过账" })
+      .where(eq(stocktake.pdNo, left.stocktake.pdNo));
   revalidateAll();
-  return { ok: n > 0, msg: n > 0 ? `已采纳建议，生成 ${n} 笔调整流水（已复核）` : "无可处理项" };
+  return {
+    ok: n > 0,
+    msg: n > 0 ? `已采纳建议，生成 ${n} 笔调整流水（已复核）` : "无可处理项",
+  };
 }
 
 export async function postAllStocktake(): Promise<Result> {
@@ -218,10 +264,21 @@ export async function postAllStocktake(): Promise<Result> {
   const view = await loadStocktakeView();
   if (!view) return { ok: false, msg: "无盘点单" };
   const keys = view.rows.filter((r) => !r.resolved).map((r) => r.skuCode);
-  const n = await postRows(keys, u.name, view.stocktake.pdNo, view.stocktake.counter);
-  await db.update(stocktake).set({ status: "已过账" }).where(eq(stocktake.pdNo, view.stocktake.pdNo));
+  const n = await postRows(
+    keys,
+    u.name,
+    view.stocktake.pdNo,
+    view.stocktake.counter,
+  );
+  await db
+    .update(stocktake)
+    .set({ status: "已过账" })
+    .where(eq(stocktake.pdNo, view.stocktake.pdNo));
   revalidateAll();
-  return { ok: true, msg: `盘点过账完成：${n} 个 SKU 已生成差异调整流水（老板审批）` };
+  return {
+    ok: true,
+    msg: `盘点过账完成：${n} 个 SKU 已生成差异调整流水（老板审批）`,
+  };
 }
 
 /** 重置演示数据（老板）。 */
@@ -234,11 +291,17 @@ export async function resetDemo(): Promise<Result> {
 }
 
 function isRedirect(e: unknown) {
-  return typeof (e as { digest?: string })?.digest === "string" && (e as { digest: string }).digest.startsWith("NEXT_REDIRECT");
+  return (
+    typeof (e as { digest?: string })?.digest === "string" &&
+    (e as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+  );
 }
 
 /** 真实登录（登录页预填账号密码，点击即登）。 */
-export async function loginAction(_prev: string | null, formData: FormData): Promise<string | null> {
+export async function loginAction(
+  _prev: string | null,
+  formData: FormData,
+): Promise<string | null> {
   try {
     await signIn("credentials", {
       email: String(formData.get("email") ?? ""),
@@ -257,7 +320,11 @@ export async function switchRole(role: Role): Promise<void> {
   const u = DEMO_USERS.find((x) => x.role === role);
   if (!u) return;
   // redirect:false → 仅设置会话 cookie 并返回；由客户端 router.refresh() 刷新（命令式调用下 redirect 不生效）。
-  await signIn("credentials", { email: u.email, password: u.password, redirect: false });
+  await signIn("credentials", {
+    email: u.email,
+    password: u.password,
+    redirect: false,
+  });
 }
 
 export async function logoutAction(): Promise<void> {

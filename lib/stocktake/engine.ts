@@ -1,7 +1,8 @@
 import { db } from "@/lib/db/client";
-import { poLine, type Sku } from "@/lib/db/schema";
 import { activeStocktake, allSkus, ledgerOf } from "@/lib/db/queries";
-import { attribute, type Attribution, type Bucket } from "./attribution";
+import { type Sku, poLine } from "@/lib/db/schema";
+
+import { type Attribution, type Bucket, attribute } from "./attribution";
 
 export type DiffRow = {
   skuCode: string;
@@ -27,13 +28,20 @@ export async function loadStocktakeView(): Promise<StocktakeView | null> {
   const skuMap = new Map(skus.map((s) => [s.skuCode, s]));
   const lines = await db.select().from(poLine);
   const poOrdered = (poRef: string, skuCode: string) =>
-    lines.find((l) => l.poNo === poRef && l.skuCode === skuCode)?.ordered ?? null;
+    lines.find((l) => l.poNo === poRef && l.skuCode === skuCode)?.ordered ??
+    null;
 
   const siblings = st.counts
     .map((c) => {
       const s = skuMap.get(c.skuCode);
       if (!s) return null;
-      return { skuCode: c.skuCode, styleNo: s.styleNo, color: s.color, size: s.size, diff: c.actual - c.bookSnapshot };
+      return {
+        skuCode: c.skuCode,
+        styleNo: s.styleNo,
+        color: s.color,
+        size: s.size,
+        diff: c.actual - c.bookSnapshot,
+      };
     })
     .filter((x): x is NonNullable<typeof x> => !!x);
 
@@ -44,7 +52,14 @@ export async function loadStocktakeView(): Promise<StocktakeView | null> {
     const diff = c.actual - c.bookSnapshot;
     if (diff === 0) continue;
     const ledger = await ledgerOf(c.skuCode);
-    const attr = attribute({ sku, diff, ledger, snapTs: st.snapTs, siblings, poOrdered });
+    const attr = attribute({
+      sku,
+      diff,
+      ledger,
+      snapTs: st.snapTs,
+      siblings,
+      poOrdered,
+    });
     rows.push({
       skuCode: c.skuCode,
       sku,
@@ -64,7 +79,9 @@ export async function loadStocktakeView(): Promise<StocktakeView | null> {
 export function summarize(rows: DiffRow[]) {
   const loss = rows.filter((r) => r.val < 0).reduce((a, r) => a + r.val, 0);
   const real = rows.filter((r) => r.attr.real).reduce((a, r) => a + r.val, 0);
-  const recover = rows.filter((r) => r.attr.recover).reduce((a, r) => a + r.val, 0);
+  const recover = rows
+    .filter((r) => r.attr.recover)
+    .reduce((a, r) => a + r.val, 0);
   const buckets: Partial<Record<Bucket, { n: number; val: number }>> = {};
   for (const r of rows) {
     const b = (buckets[r.attr.bucket] ??= { n: 0, val: 0 });

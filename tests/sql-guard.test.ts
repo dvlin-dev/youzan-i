@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+
 import { guardReadonlySql } from "../lib/ai/sql-guard";
 import type { Role } from "../lib/constants";
 
@@ -20,11 +21,17 @@ function rejected(sql: string, role: Role = admin) {
 describe("guardReadonlySql · 放行正常只读查询", () => {
   it("简单 SELECT", () => ok("SELECT sku_code, color FROM sku"));
   it("聚合 + GROUP BY + ORDER BY + LIMIT", () =>
-    ok("select color, sum(delta) from stock_ledger where status='posted' group by color order by 2 desc limit 10"));
+    ok(
+      "select color, sum(delta) from stock_ledger where status='posted' group by color order by 2 desc limit 10",
+    ));
   it("WITH CTE", () =>
-    ok("WITH t AS (SELECT sku_code, SUM(delta) q FROM stock_ledger GROUP BY sku_code) SELECT * FROM t WHERE q < 0"));
+    ok(
+      "WITH t AS (SELECT sku_code, SUM(delta) q FROM stock_ledger GROUP BY sku_code) SELECT * FROM t WHERE q < 0",
+    ));
   it("JOIN", () =>
-    ok("select s.style_name, l.delta from stock_ledger l join sku s on s.sku_code = l.sku_code"));
+    ok(
+      "select s.style_name, l.delta from stock_ledger l join sku s on s.sku_code = l.sku_code",
+    ));
   it("前导括号 / UNION", () => ok("(SELECT 1 AS n) UNION (SELECT 2)"));
   it("结尾单个分号允许", () => ok("SELECT 1;"));
   it("字面量里出现分号不算多语句", () =>
@@ -58,7 +65,13 @@ describe("guardReadonlySql · 拒绝多语句 / 注释绕过", () => {
 });
 
 describe("guardReadonlySql · 拒绝非 SELECT 开头", () => {
-  for (const sql of ["TABLE sku", "VALUES (1),(2)", "EXPLAIN ANALYZE SELECT 1", "SHOW ALL", "COPY sku TO STDOUT"]) {
+  for (const sql of [
+    "TABLE sku",
+    "VALUES (1),(2)",
+    "EXPLAIN ANALYZE SELECT 1",
+    "SHOW ALL",
+    "COPY sku TO STDOUT",
+  ]) {
     it(sql, () => rejected(sql));
   }
 });
@@ -81,7 +94,10 @@ describe("guardReadonlySql · 拒绝危险函数 / 锁", () => {
 describe("guardReadonlySql · 拒绝统计目录（pg_stats 暴露列采样值）", () => {
   for (const role of [admin, buyer, warehouse] as Role[]) {
     it(`pg_stats / pg_statistic · ${role}`, () => {
-      rejected("select most_common_vals from pg_stats where attname = 'password_hash'", role);
+      rejected(
+        "select most_common_vals from pg_stats where attname = 'password_hash'",
+        role,
+      );
       rejected("select most_common_vals from pg_statistic limit 1", role);
     });
   }
@@ -93,7 +109,8 @@ describe("guardReadonlySql · 角色脱敏（数据层）", () => {
     rejected("SELECT password_hash FROM app_user", admin);
     rejected("SELECT password_hash FROM app_user", buyer);
   });
-  it("仓管不能读 cost_price", () => rejected("SELECT cost_price FROM sku", warehouse));
+  it("仓管不能读 cost_price", () =>
+    rejected("SELECT cost_price FROM sku", warehouse));
   it("仓管不能读采购单 / 盘点", () => {
     rejected("SELECT * FROM purchase_order", warehouse);
     rejected("SELECT * FROM po_line", warehouse);
@@ -104,7 +121,8 @@ describe("guardReadonlySql · 角色脱敏（数据层）", () => {
     ok("SELECT cost_price FROM sku", admin);
   });
   it("采购可读采购单", () => ok("SELECT supplier FROM purchase_order", buyer));
-  it("仓管能读自己的库存表", () => ok("SELECT sku_code, color FROM sku", warehouse));
+  it("仓管能读自己的库存表", () =>
+    ok("SELECT sku_code, color FROM sku", warehouse));
 });
 
 describe("guardReadonlySql · 杂项", () => {

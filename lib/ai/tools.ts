@@ -1,13 +1,18 @@
 import { z } from "zod";
-import { stockMap, levelOf } from "@/lib/db/queries";
-import { loadStocktakeView, summarize } from "@/lib/stocktake/engine";
+
 import { submitMove } from "@/lib/actions";
-import { yuan } from "@/lib/money";
-import { can, type Role } from "@/lib/constants";
-import type { Sku } from "@/lib/db/schema";
-import { guardReadonlySql } from "@/lib/ai/sql-guard";
-import { readonlyEnabled, runReadonlyQuery, READONLY_ROW_CAP } from "@/lib/db/readonly";
 import { auditSqlQuery } from "@/lib/ai/audit";
+import { guardReadonlySql } from "@/lib/ai/sql-guard";
+import { type Role, can } from "@/lib/constants";
+import { levelOf, stockMap } from "@/lib/db/queries";
+import {
+  READONLY_ROW_CAP,
+  readonlyEnabled,
+  runReadonlyQuery,
+} from "@/lib/db/readonly";
+import type { Sku } from "@/lib/db/schema";
+import { yuan } from "@/lib/money";
+import { loadStocktakeView, summarize } from "@/lib/stocktake/engine";
 
 export type RecordedMove = { docNo: string; summary: string };
 
@@ -46,10 +51,13 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
   const specs: ToolSpec[] = [
     {
       name: "query_stock",
-      description: "查某个 SKU 当前还有多少件库存。用户问『还剩多少 / 库存多少』时用。",
+      description:
+        "查某个 SKU 当前还有多少件库存。用户问『还剩多少 / 库存多少』时用。",
       schema: z.object({
         styleNo: z.string().describe("款号，如 AW2024-3301"),
-        color: z.string().describe("颜色，去掉多余的『色』字，如 藏青 / 黑 / 米白"),
+        color: z
+          .string()
+          .describe("颜色，去掉多余的『色』字，如 藏青 / 黑 / 米白"),
         size: z.string().describe("尺码，取值 S / M / L / XL / 2XL"),
       }),
       execute: async (a) => {
@@ -67,12 +75,17 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
       schema: z.object({}),
       execute: async () => {
         const sm = await stockMap();
-        const low = skus.filter((s) => levelOf(sm[s.skuCode] ?? 0, s.safetyStock) !== "ok");
+        const low = skus.filter(
+          (s) => levelOf(sm[s.skuCode] ?? 0, s.safetyStock) !== "ok",
+        );
         if (!low.length) return "库存健康，暂无低库存。";
         return (
           `共 ${low.length} 个 SKU 低于安全库存（含断码），款号/颜色/尺码已给全：\n` +
           low
-            .map((s) => `· 款号 ${s.styleNo}｜颜色 ${s.color}｜尺码 ${s.size}（${s.styleName}）当前 ${sm[s.skuCode] ?? 0} 件 / 安全库存 ${s.safetyStock}`)
+            .map(
+              (s) =>
+                `· 款号 ${s.styleNo}｜颜色 ${s.color}｜尺码 ${s.size}（${s.styleName}）当前 ${sm[s.skuCode] ?? 0} 件 / 安全库存 ${s.safetyStock}`,
+            )
             .join("\n")
         );
       },
@@ -82,7 +95,8 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
   if (can.recon(role)) {
     specs.push({
       name: "recon_summary",
-      description: "盘点对账汇总：盘亏毛额、AI 归因后的真损失/可追回、各成因分桶。用户问『对得上账吗 / 差多少 / 差在哪』时用。",
+      description:
+        "盘点对账汇总：盘亏毛额、AI 归因后的真损失/可追回、各成因分桶。用户问『对得上账吗 / 差多少 / 差在哪』时用。",
       schema: z.object({}),
       execute: async () => {
         const view = await loadStocktakeView();
@@ -96,7 +110,9 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
           swap: "串色·货在",
           transit: "在途·假差异",
         };
-        const lines = Object.entries(s.buckets).map(([b, v]) => `· ${names[b] ?? b}：${yuan(v!.val)}（${v!.n}项）`);
+        const lines = Object.entries(s.buckets).map(
+          ([b, v]) => `· ${names[b] ?? b}：${yuan(v!.val)}（${v!.n}项）`,
+        );
         return `盘亏毛额 ${yuan(s.loss)}（≈"差三万多"）；AI 归因后真实物净损失约 ${yuan(s.real)}、可追回 ${yuan(s.recover)}。\n${lines.join("\n")}`;
       },
     });
@@ -109,21 +125,37 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
         "登记一笔入库(IN)或出库(OUT)，生成『待复核单』。审批后才入账，所以你可以直接登记、不必在对话里再让用户确认。" +
         "一轮里可多次调用，把多笔（如多个低库存 SKU 的补货）一并登记。",
       schema: z.object({
-        type: z.enum(["IN", "OUT"]).describe("IN=入库（加库存，如到货/补货），OUT=出库（减库存，如销售/调出）"),
+        type: z
+          .enum(["IN", "OUT"])
+          .describe(
+            "IN=入库（加库存，如到货/补货），OUT=出库（减库存，如销售/调出）",
+          ),
         styleNo: z.string().describe("款号，如 AW2024-3301"),
-        color: z.string().describe("颜色，去掉多余的『色』字，如 藏青 / 黑 / 米白"),
+        color: z
+          .string()
+          .describe("颜色，去掉多余的『色』字，如 藏青 / 黑 / 米白"),
         size: z.string().describe("尺码，取值 S / M / L / XL / 2XL"),
-        qty: z.coerce.number().int().positive().describe("这一笔的件数（正整数）。补货到 N 件时填 N−当前库存（当前库存先用 low_stock / query_stock 查）"),
+        qty: z.coerce
+          .number()
+          .int()
+          .positive()
+          .describe(
+            "这一笔的件数（正整数）。补货到 N 件时填 N−当前库存（当前库存先用 low_stock / query_stock 查）",
+          ),
       }),
       execute: async (a) => {
         const type = a.type === "OUT" ? "OUT" : "IN";
         const skuCode = `${a.styleNo}-${a.color}-${a.size}`;
         const qty = Number(a.qty);
-        if (!skuSet.has(skuCode)) return `登记失败：系统里没有 ${skuCode} 这个 SKU，请核对款号/颜色/尺码`;
+        if (!skuSet.has(skuCode))
+          return `登记失败：系统里没有 ${skuCode} 这个 SKU，请核对款号/颜色/尺码`;
         const r = await submitMove({ type, entries: [{ skuCode, qty }] });
         const label = type === "IN" ? "入库" : "出库";
         if (r.ok && r.docNo) {
-          recorded.push({ docNo: r.docNo, summary: `${label} ${skuCode} ${qty} 件` });
+          recorded.push({
+            docNo: r.docNo,
+            summary: `${label} ${skuCode} ${qty} 件`,
+          });
           return `已生成待复核单 ${r.docNo}（${label} ${skuCode} ${qty} 件），等待审批入账`;
         }
         return `登记失败：${r.msg}`;
@@ -149,28 +181,59 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
     schema: z.object({
       sql: z
         .string()
-        .describe("一条只读 SELECT 语句，可含 WITH/JOIN/GROUP BY/ORDER BY/LIMIT。不要写分号分隔的多条语句，不要写注释。"),
+        .describe(
+          "一条只读 SELECT 语句，可含 WITH/JOIN/GROUP BY/ORDER BY/LIMIT。不要写分号分隔的多条语句，不要写注释。",
+        ),
     }),
     execute: async (a) => {
       const raw = String(a.sql ?? "");
       if (!readonlyEnabled(role)) {
-        auditSqlQuery({ actorId: actor.id, actorName: actor.name, role, sql: raw, outcome: "disabled" });
+        auditSqlQuery({
+          actorId: actor.id,
+          actorName: actor.name,
+          role,
+          sql: raw,
+          outcome: "disabled",
+        });
         return "只读 SQL 暂不可用：系统未配置只读数据库角色（DATABASE_URL_READONLY）。请改用其它工具，或让管理员开启。";
       }
       const guard = guardReadonlySql(raw, role);
       if (!guard.ok) {
-        auditSqlQuery({ actorId: actor.id, actorName: actor.name, role, sql: raw, outcome: "rejected", reason: guard.reason });
+        auditSqlQuery({
+          actorId: actor.id,
+          actorName: actor.name,
+          role,
+          sql: raw,
+          outcome: "rejected",
+          reason: guard.reason,
+        });
         return `已拒绝该 SQL：${guard.reason}`;
       }
       try {
         const { rows, truncated } = await runReadonlyQuery(guard.sql, role);
         const safe = maskOutputColumns(rows, role);
-        auditSqlQuery({ actorId: actor.id, actorName: actor.name, role, sql: guard.sql, outcome: "ok", rowCount: safe.length });
+        auditSqlQuery({
+          actorId: actor.id,
+          actorName: actor.name,
+          role,
+          sql: guard.sql,
+          outcome: "ok",
+          rowCount: safe.length,
+        });
         return formatRows(safe, truncated);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        auditSqlQuery({ actorId: actor.id, actorName: actor.name, role, sql: guard.sql, outcome: "error", reason: msg });
-        const hint = /more than once|duplicate/i.test(msg) ? "（多列同名，请用 AS 给列取别名）" : "";
+        auditSqlQuery({
+          actorId: actor.id,
+          actorName: actor.name,
+          role,
+          sql: guard.sql,
+          outcome: "error",
+          reason: msg,
+        });
+        const hint = /more than once|duplicate/i.test(msg)
+          ? "（多列同名，请用 AS 给列取别名）"
+          : "";
         return `查询执行失败：${msg}${hint}`;
       }
     },
@@ -186,7 +249,10 @@ function deniedOutputColumns(role: Role): string[] {
 }
 
 /** 输出列脱敏——与 actions.ts 的 maskCost 同源：成本价对仓管不进响应体，哪怕来自 SELECT *。 */
-function maskOutputColumns(rows: Record<string, unknown>[], role: Role): Record<string, unknown>[] {
+function maskOutputColumns(
+  rows: Record<string, unknown>[],
+  role: Role,
+): Record<string, unknown>[] {
   const denied = deniedOutputColumns(role);
   if (!rows.length || !denied.some((c) => c in rows[0])) return rows;
   return rows.map((r) => {
@@ -201,7 +267,10 @@ const OUT_TOTAL_CAP = 8000; // 总字节预算
 const OUT_ROW_CAP = 2000; // 单行序列化上限——逐行物化时设界，不对全量行一次性 stringify
 
 /** 把只读查询结果整理成模型易读的紧凑文本：表头 + JSON 行，逐行按字节预算截断（防超大单元格）。 */
-function formatRows(rows: Record<string, unknown>[], truncated: boolean): string {
+function formatRows(
+  rows: Record<string, unknown>[],
+  truncated: boolean,
+): string {
   if (rows.length === 0) return "查询成功：0 行。";
   const cols = Object.keys(rows[0]);
   const parts: string[] = [];
@@ -223,6 +292,9 @@ function formatRows(rows: Record<string, unknown>[], truncated: boolean): string
     shown++;
   }
   const head = `查询成功：${rows.length} 行${truncated ? `（已截断到前 ${READONLY_ROW_CAP} 行）` : ""}｜列：${cols.join(", ")}`;
-  const note = shown < rows.length || clipped ? `\n（仅展示前 ${shown} 行 / 已按体量截断，请缩小范围或加聚合）` : "";
+  const note =
+    shown < rows.length || clipped
+      ? `\n（仅展示前 ${shown} 行 / 已按体量截断，请缩小范围或加聚合）`
+      : "";
   return `${head}\n[${parts.join(",")}]${note}`;
 }

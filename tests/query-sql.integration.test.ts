@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll } from "vitest";
 import { neon } from "@neondatabase/serverless";
-import { runReadonlyQuery, readonlyEnabled } from "../lib/db/readonly";
+import { beforeAll, describe, expect, it } from "vitest";
+
+import { readonlyEnabled, runReadonlyQuery } from "../lib/db/readonly";
 
 /**
  * query_sql 连接层集成回归（gated）。**只读不写**——写尝试都被 DB 拒，不改任何数据，
@@ -8,7 +9,8 @@ import { runReadonlyQuery, readonlyEnabled } from "../lib/db/readonly";
  *   pnpm test:integration
  * 普通 `pnpm test` 下（无 env）整组自动跳过。
  */
-const RUN = !!process.env.DATABASE_URL_READONLY && !!process.env.DATABASE_URL_READONLY_WH;
+const RUN =
+  !!process.env.DATABASE_URL_READONLY && !!process.env.DATABASE_URL_READONLY_WH;
 
 describe.skipIf(!RUN)("query_sql 连接层集成（只读，gated）", () => {
   // Neon serverless 计算可能挂起，首个查询会冷启动（偶发 fetch failed）。预热 + 退避重试，避免假阴性。
@@ -62,14 +64,21 @@ describe.skipIf(!RUN)("query_sql 连接层集成（只读，gated）", () => {
   });
 
   it("采购/老板能读 cost_price（与仓管区分）", async () => {
-    const { rows } = await runReadonlyQuery("select sku_code, cost_price from sku limit 1", "admin");
+    const { rows } = await runReadonlyQuery(
+      "select sku_code, cost_price from sku limit 1",
+      "admin",
+    );
     expect(rows[0]).toHaveProperty("cost_price");
   });
 
   it("仓管的只读角色对采购单/盘点表无权（DB 层兜底，不靠 guard）", async () => {
     const wh = neon(process.env.DATABASE_URL_READONLY_WH!);
-    await expect(wh("select 1 from purchase_order limit 1")).rejects.toThrow(/permission denied|does not exist/i);
-    await expect(wh("select 1 from stocktake_count limit 1")).rejects.toThrow(/permission denied|does not exist/i);
+    await expect(wh("select 1 from purchase_order limit 1")).rejects.toThrow(
+      /permission denied|does not exist/i,
+    );
+    await expect(wh("select 1 from stocktake_count limit 1")).rejects.toThrow(
+      /permission denied|does not exist/i,
+    );
   });
 
   it("RC-08 全表守恒（只读）：没有任何 SKU 的 posted 库存为负", async () => {
@@ -81,7 +90,10 @@ describe.skipIf(!RUN)("query_sql 连接层集成（只读，gated）", () => {
   });
 
   it("自动 LIMIT：超过上限的查询被截断并标记 truncated", async () => {
-    const { rows, truncated } = await runReadonlyQuery("select generate_series(1, 5000) as n", "admin");
+    const { rows, truncated } = await runReadonlyQuery(
+      "select generate_series(1, 5000) as n",
+      "admin",
+    );
     expect(rows.length).toBeLessThanOrEqual(200);
     expect(truncated).toBe(true);
   });

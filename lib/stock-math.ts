@@ -11,8 +11,14 @@ export function sumDeltas(rows: { delta: number }[]): number {
 }
 
 /** 逐笔结存（不可变流水的 running balance），渲染纯函数、无外部可变量。 */
-export function runningBalances<T extends { delta: number }>(rows: T[]): { row: T; balance: number }[] {
+export function runningBalances<T extends { delta: number }>(
+  rows: T[],
+): { row: T; balance: number }[] {
   const out: { row: T; balance: number }[] = [];
-  for (const r of rows) out.push({ row: r, balance: (out[out.length - 1]?.balance ?? 0) + r.delta });
+  for (const r of rows)
+    out.push({
+      row: r,
+      balance: (out[out.length - 1]?.balance ?? 0) + r.delta,
+    });
   return out;
 }

@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { yuan, wan } from "../lib/money";
+import { describe, expect, it } from "vitest";
+
+import { wan, yuan } from "../lib/money";
 
 describe("金额（整数分存储，仅展示层 /100）", () => {
   it("分 → 元，按整数运算无浮点漂移", () => {

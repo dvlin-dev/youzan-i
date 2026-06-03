@@ -1,13 +1,17 @@
-import { allSkus, stockMap, pendingDocs } from "@/lib/db/queries";
-import { currentUser } from "@/lib/session";
-import { can } from "@/lib/constants";
-import { MoveBoard } from "@/components/MoveBoard";
 import { LockView } from "@/components/LockView";
+import { MoveBoard } from "@/components/MoveBoard";
+import { can } from "@/lib/constants";
+import { allSkus, pendingDocs, stockMap } from "@/lib/db/queries";
+import { currentUser } from "@/lib/session";
 
 export default async function MovePage() {
   const user = (await currentUser())!;
   if (!can.move(user.role)) return <LockView name="入库 / 出库" />;
-  const [skus, sm, pend] = await Promise.all([allSkus(), stockMap(), pendingDocs()]);
+  const [skus, sm, pend] = await Promise.all([
+    allSkus(),
+    stockMap(),
+    pendingDocs(),
+  ]);
   const rows = skus.map((s) => ({
     skuCode: s.skuCode,
     styleNo: s.styleNo,

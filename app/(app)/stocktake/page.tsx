@@ -1,8 +1,8 @@
-import { currentUser } from "@/lib/session";
-import { can } from "@/lib/constants";
-import { loadStocktakeView, summarize } from "@/lib/stocktake/engine";
-import { StocktakeBoard } from "@/components/StocktakeBoard";
 import { LockView } from "@/components/LockView";
+import { StocktakeBoard } from "@/components/StocktakeBoard";
+import { can } from "@/lib/constants";
+import { currentUser } from "@/lib/session";
+import { loadStocktakeView, summarize } from "@/lib/stocktake/engine";
 
 export default async function StocktakePage() {
   const user = (await currentUser())!;

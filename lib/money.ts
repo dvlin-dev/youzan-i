@@ -5,7 +5,10 @@ export function yuan(cents: number): string {
   return (
     sign +
     "¥" +
-    v.toLocaleString("zh-CN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+    v.toLocaleString("zh-CN", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    })
   );
 }
 

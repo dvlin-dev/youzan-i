@@ -1,5 +1,5 @@
 import { db } from "./client";
-import { stockLedger, type NewLedger } from "./schema";
+import { type NewLedger, stockLedger } from "./schema";
 
 /**
  * append-only：写库存的唯一入口是「追加 posted 流水」。

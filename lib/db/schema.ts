@@ -1,12 +1,12 @@
 import {
-  pgTable,
-  pgEnum,
-  text,
-  integer,
   boolean,
-  serial,
-  timestamp,
   index,
+  integer,
+  pgEnum,
+  pgTable,
+  serial,
+  text,
+  timestamp,
 } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["warehouse", "buyer", "admin"]);
@@ -18,7 +18,10 @@ export const poStatusEnum = pgEnum("po_status", [
   "已入库",
   "已取消",
 ]);
-export const stocktakeStatusEnum = pgEnum("stocktake_status", ["待复核", "已过账"]);
+export const stocktakeStatusEnum = pgEnum("stocktake_status", [
+  "待复核",
+  "已过账",
+]);
 
 /** 用户与角色。 */
 export const appUser = pgTable("app_user", {
@@ -71,9 +74,14 @@ export const stockLedger = pgTable(
     poRef: text("po_ref"),
     reversedBy: integer("reversed_by"),
     pdAdjust: boolean("pd_adjust").notNull().default(false),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
-  (t) => [index("ledger_sku_idx").on(t.skuCode), index("ledger_status_idx").on(t.status)],
+  (t) => [
+    index("ledger_sku_idx").on(t.skuCode),
+    index("ledger_status_idx").on(t.status),
+  ],
 );
 
 /**
@@ -96,9 +104,14 @@ export const moveDraft = pgTable(
     poRef: text("po_ref"),
     qc: boolean("qc"),
     scanned: boolean("scanned").notNull().default(true),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
-  (t) => [index("draft_doc_idx").on(t.docNo), index("draft_po_idx").on(t.poRef)],
+  (t) => [
+    index("draft_doc_idx").on(t.docNo),
+    index("draft_po_idx").on(t.poRef),
+  ],
 );
 
 export const purchaseOrder = pgTable("purchase_order", {
@@ -107,7 +120,9 @@ export const purchaseOrder = pgTable("purchase_order", {
   status: poStatusEnum("status").notNull().default("草稿"),
   createdBy: text("created_by").notNull(),
   eta: text("eta"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 export const poLine = pgTable("po_line", {
@@ -128,7 +143,9 @@ export const stocktake = pgTable("stocktake", {
   snapTs: timestamp("snap_ts", { withTimezone: true }).notNull(),
   counter: text("counter").notNull(),
   createdBy: text("created_by").notNull(),
-  countedAt: timestamp("counted_at", { withTimezone: true }).notNull().defaultNow(),
+  countedAt: timestamp("counted_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 export const stocktakeCount = pgTable("stocktake_count", {

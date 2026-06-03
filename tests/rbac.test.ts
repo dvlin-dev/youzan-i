@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { can, type Role } from "../lib/constants";
+import { describe, expect, it } from "vitest";
+
+import { type Role, can } from "../lib/constants";
 
 /**
  * RC-06 + AI 越权红线（策略层）：权限矩阵是「权限在数据层生效」的唯一真相，
@@ -10,9 +11,27 @@ const ROLES: Role[] = ["warehouse", "buyer", "admin"];
 describe("RBAC 权限矩阵 can.*（RC-06 / 越权红线）", () => {
   // 期望矩阵：仓管只读库存+录出入库（无成本/采购/盘点）；采购看成本+采购+对账（不录出入库）；老板全开。
   const expected: Record<Role, Record<keyof typeof can, boolean>> = {
-    warehouse: { cost: false, recon: false, po: false, move: true, postStocktake: false },
-    buyer: { cost: true, recon: true, po: true, move: false, postStocktake: false },
-    admin: { cost: true, recon: true, po: true, move: true, postStocktake: true },
+    warehouse: {
+      cost: false,
+      recon: false,
+      po: false,
+      move: true,
+      postStocktake: false,
+    },
+    buyer: {
+      cost: true,
+      recon: true,
+      po: true,
+      move: false,
+      postStocktake: false,
+    },
+    admin: {
+      cost: true,
+      recon: true,
+      po: true,
+      move: true,
+      postStocktake: true,
+    },
   };
 
   for (const role of ROLES) {

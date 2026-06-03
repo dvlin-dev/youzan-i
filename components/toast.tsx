@@ -19,7 +19,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       <div className="toasts">
         {ts.map((t) => (
-          <div key={t.id} className={"toast " + (t.type === "err" ? "err" : "")}>
+          <div
+            key={t.id}
+            className={"toast " + (t.type === "err" ? "err" : "")}
+          >
             {t.msg}
           </div>
         ))}

@@ -1,6 +1,7 @@
-import { db, rawSql } from "./client";
-import { moveDraft, type MoveDraft, type NewMoveDraft } from "./schema";
 import { eq } from "drizzle-orm";
+
+import { db, rawSql } from "./client";
+import { type MoveDraft, type NewMoveDraft, moveDraft } from "./schema";
 
 /** 暂存待复核草稿（从不进入不可变 ledger）。 */
 export async function insertDraft(rows: NewMoveDraft[]) {
@@ -31,7 +32,11 @@ export async function draftDocs(): Promise<Record<string, MoveDraft[]>> {
   return m;
 }
 
-export type PostedDraftRow = { sku_code: string; delta: number; po_ref: string | null };
+export type PostedDraftRow = {
+  sku_code: string;
+  delta: number;
+  po_ref: string | null;
+};
 
 /**
  * 原子过账（守恒护栏）：在**单条 SQL 语句**里完成
@@ -41,7 +46,10 @@ export type PostedDraftRow = { sku_code: string; delta: number; po_ref: string |
  * 杜绝两张待复核出库单各自初检通过、复核后双双打穿库存的并发缺口。
  * 返回实际追加的行；为空 = 被守恒拦截（库存不足）。
  */
-export async function postDraftAtomic(docNo: string, reviewerId: string): Promise<PostedDraftRow[]> {
+export async function postDraftAtomic(
+  docNo: string,
+  reviewerId: string,
+): Promise<PostedDraftRow[]> {
   const rows = (await rawSql`
     INSERT INTO stock_ledger
       (sku_code, delta, biz_type, doc_no, operator_id, reviewer_id, po_ref, qc, scanned, status)

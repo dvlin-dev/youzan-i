@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { sumDeltas, runningBalances } from "../lib/stock-math";
+import { describe, expect, it } from "vitest";
+
+import { runningBalances, sumDeltas } from "../lib/stock-math";
 
 describe("库存守恒不变量（stock-math）", () => {
   it("I2 单一真相：库存 = 流水 delta 累加", () => {

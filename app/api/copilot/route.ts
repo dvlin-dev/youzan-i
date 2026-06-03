@@ -14,16 +14,27 @@ const line = (obj: unknown) => JSON.stringify(obj) + "\n";
 
 export async function POST(req: Request) {
   const u = await currentUser();
-  if (!u) return new Response(line({ t: "error", message: "请先登录" }), { status: 401, headers: NDJSON });
+  if (!u)
+    return new Response(line({ t: "error", message: "请先登录" }), {
+      status: 401,
+      headers: NDJSON,
+    });
 
   let message = "";
   try {
     const body = await req.json();
     message = String(body?.message ?? "");
   } catch {
-    return new Response(line({ t: "error", message: "请求格式错误" }), { status: 400, headers: NDJSON });
+    return new Response(line({ t: "error", message: "请求格式错误" }), {
+      status: 400,
+      headers: NDJSON,
+    });
   }
-  if (!message.trim()) return new Response(line({ t: "error", message: "消息为空" }), { status: 400, headers: NDJSON });
+  if (!message.trim())
+    return new Response(line({ t: "error", message: "消息为空" }), {
+      status: 400,
+      headers: NDJSON,
+    });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -33,7 +44,14 @@ export async function POST(req: Request) {
           controller.enqueue(encoder.encode(line(ev)));
         }
       } catch (e) {
-        controller.enqueue(encoder.encode(line({ t: "error", message: e instanceof Error ? e.message : String(e) })));
+        controller.enqueue(
+          encoder.encode(
+            line({
+              t: "error",
+              message: e instanceof Error ? e.message : String(e),
+            }),
+          ),
+        );
       } finally {
         controller.close();
       }
