@@ -17,10 +17,33 @@
 | 条件 | 做法 |
 | --- | --- |
 | 组件 < 120 行且逻辑简单 | 保持单文件 |
+| `return` 的 JSX 过长 / 有可独立命名的区块 | **拆成子组件**，父只负责组合 |
+| 一个组件出现 2+ 仅服务它的子组件 | 该组件建目录：`组件名/{index.tsx, components/, types.ts}`（如 `MoveBoard/`、`LedgerDrawer/`） |
 | 可测的业务判断 / 数据转换 | **下沉到 `lib/`（纯函数），不藏在 JSX/事件里** |
-| 一个组件出现 2+ 仅服务它的子组件 | 该组件建 `components/` 子目录 |
 | 类型被多文件复用 | 抽到就近 `types.ts` 或对应 `lib` 模块 |
 | 逻辑被 2+ 模块复用 | 提升到 `lib/`（逻辑）或 `components/`（UI） |
+
+## 条件渲染：早返回，不堆三元
+
+UI 里的分支不要堆成 `return` 末尾的长三元 / 深层嵌套三元（`a ? (...) : b ? (...) : null`），改用**早返回**——在组件或一个 `renderXxx()` 辅助函数顶部就 `if (条件) return <X/>`：
+
+```tsx
+// ✗ 堆在 return 里的嵌套三元，越读越深
+return <div>{resolved ? <Done/> : onAdopt ? <Adopt/> : null}</div>;
+
+// ✓ 早返回辅助函数，分支扁平、各自独立
+function renderFooter() {
+  if (resolved) return <Done />;
+  if (onAdopt) return <Adopt />;
+  return null;
+}
+return <div>{renderFooter()}</div>;
+```
+
+- 派生值、分支判断、样式计算在 `return` **之前**用具名 `const` / 小函数算好；`return` 尽量只剩组合。
+- 两选一的整块（如「盘点视图 vs 普通视图」）拆成一个子组件，内部 `if (recon) return <ReconCards/>; return <StockCards/>`。
+- 重复的内联样式 / className 选择抽成具名 `const` 或小 helper（如 `dotColor(row)`），不在 JSX 里重复写三元。
+- 简单的一元 className 选择（`x ? "a" : "b"`）可保留内联，本规则针对的是**成块、嵌套、累积**的条件 UI。
 
 ## 状态分层（真相源 vs 会话态）
 

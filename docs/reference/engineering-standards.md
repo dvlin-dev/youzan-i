@@ -47,6 +47,7 @@
 - 默认 Server Components；仅交互处用 `"use client"`，范围尽量小。
 - 写操作走 Server Actions / 类型化工具层（守恒 + 权限 + 审计在内部），UI 不直接落库。
 - 组件薄、负责组合；复杂业务规则下沉 `lib/`。子组件只服务单个组件时放该组件目录的 `components/`，多模块复用再提升到 `components/`。
+- `return` 的 JSX 过长或含成块条件时，拆子组件 + **早返回**（`if (...) return ...`），不在 return 末尾堆嵌套三元（详见 [component-structure.md](./component-structure.md#条件渲染早返回不堆三元)）。
 - 不新增 Context 管业务真相源；持久真相源由数据层（流水派生）承担，会话态留在组件本地（见 [component-structure.md](./component-structure.md)）。
 
 ## 样式规则
