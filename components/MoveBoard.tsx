@@ -9,7 +9,7 @@ import { submitMove, reviewDoc, rejectDoc } from "@/lib/actions";
 type SkuRow = { skuCode: string; styleNo: string; styleName: string; color: string; size: string; qty: number };
 type Pend = { doc: string; type: string; operator: string; n: number; sum: number };
 
-export function MoveBoard({ skus, pending, me }: { skus: SkuRow[]; pending: Pend[]; me: string }) {
+export function MoveBoard({ skus, pending }: { skus: SkuRow[]; pending: Pend[] }) {
   const [type, setType] = useState<"IN" | "OUT">("IN");
   const [style, setStyle] = useState(skus[0]?.styleNo ?? "");
   const [qty, setQty] = useState<Record<string, string>>({});
@@ -142,7 +142,7 @@ export function MoveBoard({ skus, pending, me }: { skus: SkuRow[]; pending: Pend
         <div className="dim" style={{ fontSize: 12, margin: "-4px 0 12px", display: "flex", gap: 6 }}>
           <Icon name="shield" size={13} />
           <span>
-            改变库存的动作须<b>双人复核</b>（录入人 ≠ 复核人）才入账——这正是治&ldquo;盘点差三万&rdquo;的根因。
+            改变库存的动作先进<b>待复核</b>、<b>审批</b>后才入账（任何人可审批，含录入人本人）；入账有守恒护栏不让库存为负——这正是治&ldquo;盘点差三万&rdquo;的根因。
           </span>
         </div>
         {pending.length === 0 && (
@@ -160,13 +160,10 @@ export function MoveBoard({ skus, pending, me }: { skus: SkuRow[]; pending: Pend
               </span>
               <span className="ld-doc">{p.doc}</span>
             </div>
-            <div className="dim" style={{ fontSize: 12 }}>
-              录入：{p.operator}
-              {p.operator === me && "（你本人，需他人复核）"}
-            </div>
+            <div className="dim" style={{ fontSize: 12 }}>录入：{p.operator}</div>
             <div className="row" style={{ gap: 8 }}>
               <button className="btn primary sm" onClick={() => review(p.doc)}>
-                <Icon name="check" size={13} /> 复核通过
+                <Icon name="check" size={13} /> 审批通过
               </button>
               <button className="btn sm" onClick={() => reject(p.doc)}>
                 驳回

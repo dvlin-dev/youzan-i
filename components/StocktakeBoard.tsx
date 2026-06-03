@@ -104,7 +104,7 @@ export function StocktakeBoard(props: {
               </button>
             ) : (
               <button className="btn primary sm" onClick={postAll} disabled={busy || open.length === 0}>
-                <Icon name="check" size={14} /> 全部过账（记差异流水 · 双人复核）
+                <Icon name="check" size={14} /> 全部过账（记差异流水 · 老板审批）
               </button>
             ))}
         </div>

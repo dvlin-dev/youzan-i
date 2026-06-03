@@ -23,5 +23,5 @@ export default async function MovePage() {
     n: ls.length,
     sum: ls.reduce((a, l) => a + Math.abs(l.delta), 0),
   }));
-  return <MoveBoard skus={rows} pending={pending} me={user.name} />;
+  return <MoveBoard skus={rows} pending={pending} />;
 }

@@ -24,7 +24,8 @@ function ymd(d = new Date()) {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
 }
 function docNo(type: string) {
-  return `${type}-${ymd()}-${String(Date.now()).slice(-4)}`;
+  // 末尾加随机串：AI 一轮内可能并发多次 record_move，避免同毫秒生成相同单号被并成一张单。
+  return `${type}-${ymd()}-${String(Date.now()).slice(-4)}${Math.random().toString(36).slice(2, 4)}`;
 }
 function revalidateAll() {
   for (const p of ["/dashboard", "/stock", "/move", "/purchase", "/stocktake"]) revalidatePath(p);
@@ -67,17 +68,15 @@ export async function submitMove(raw: MoveInput): Promise<Result> {
 }
 
 /**
- * 双人复核通过：reviewer ≠ creator 强校验 + 守恒护栏。
+ * 审批入账：单人审批即可（任意有出入库权限者，审批人可与录入人相同）+ 守恒护栏。
  * 通过 postDraftAtomic 在单条原子语句里「校验落账后库存不为负 + 追加 posted 流水」，
- * 杜绝两张待复核出库单各自初检通过、复核后双双打穿库存。
+ * 杜绝两张待复核出库单各自初检通过、审批后双双打穿库存。
  */
 export async function reviewDoc(doc: string): Promise<Result> {
   const u = await requireUser();
-  if (!can.move(u.role)) return { ok: false, msg: "无权复核" };
+  if (!can.move(u.role)) return { ok: false, msg: "无权审批" };
   const rows = await getDraft(doc);
   if (!rows.length) return { ok: false, msg: "单据不存在或已处理" };
-  if (rows[0].operatorId === u.name)
-    return { ok: false, msg: "需由他人复核（录入人 ≠ 复核人）——请切换到另一账号复核" };
 
   const posted = await postDraftAtomic(doc, u.name);
   if (!posted.length) {
@@ -222,7 +221,7 @@ export async function postAllStocktake(): Promise<Result> {
   const n = await postRows(keys, u.name, view.stocktake.pdNo, view.stocktake.counter);
   await db.update(stocktake).set({ status: "已过账" }).where(eq(stocktake.pdNo, view.stocktake.pdNo));
   revalidateAll();
-  return { ok: true, msg: `盘点过账完成：${n} 个 SKU 已生成差异调整流水（双人复核）` };
+  return { ok: true, msg: `盘点过账完成：${n} 个 SKU 已生成差异调整流水（老板审批）` };
 }
 
 /** 重置演示数据（老板）。 */

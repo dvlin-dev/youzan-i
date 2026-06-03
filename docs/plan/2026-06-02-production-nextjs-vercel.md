@@ -45,16 +45,18 @@ stocktake_count(id PK, pd_no FK, sku_code, book_snapshot, actual)
 
 ```text
 queryStock(filter, role)          只读，按角色脱敏 cost
-appendLedger({sku,delta,bizType}) 守恒 + 不为负 → pending 流水
-reviewDoc(docNo, reviewer)        reviewer ≠ creator → posted
-createPo / receivePo              采购单状态机 + 到货回写 + 入库流水
-attributeDiff(pdNo, sku)          两层归因（见 §6）
-postStocktake(pdNo, keys)         追加盘盈/盘亏流水（pending）
+submitMove({type,entries})        守恒 + 不为负 → move_draft 待复核草稿
+reviewDoc(docNo, reviewer)        审批入账：任意人可批（postDraftAtomic 守恒护栏）
+createPo / receivePo              采购单状态机：到货仅生成草稿，复核入账后才回写进度
+attributeDiff(pdNo, sku)          第 1 层确定性归因（见 §6）；explainDiff = 第 2 层 LLM 解释
+postStocktake(pdNo, keys)         追加盘盈/盘亏流水
 ```
+
+> Agent 工具集中在 `lib/ai/tools.ts`：`query_stock` / `low_stock` / `recon_summary` / `record_move`。
 
 ## 5. AI Copilot（lib/ai + app/api/copilot）
 
-NL → `Agent.run()`（tools = §4 白名单 `tool()`）→ 写工具 `needsApproval` 命中产生 **interruption**（= 结构化工具调用预览，不落库）→ `state.approve` 确认 → `appendLedger` 进待复核 → 双人复核入账。全程审计（含原始自然语言）。提示注入防御用 `inputGuardrails`：用户内容与指令分离、Agent 输出只能映射白名单工具、危险动作 `needsApproval` 必经 HITL。
+NL → `Agent.run()`（tools = `lib/ai/tools.ts` 白名单 `tool()`）跑 ReAct 循环，一轮内可连续多步：`record_move` **直接生成待复核单**（不在对话内逐条确认，避免割裂 agent 连续执行）→ 一轮收尾时 AI 汇报本轮操作（列出待复核单号）并提示去「入库/出库 → 待复核」审批 → 任意人审批入账（守恒护栏）。全程审计（含原始自然语言）。提示注入防御用 `inputGuardrails`：用户内容与指令分离、Agent 输出只能映射白名单工具、所有写操作先进待复核审批闸。
 
 ## 6. 盘点对账 + 两层归因（lib/stocktake）
 
@@ -70,7 +72,7 @@ NL → `Agent.run()`（tools = §4 白名单 `tool()`）→ 写工具 `needsAppr
 | --- | --- | --- |
 | **M0** 脚手架 + 部署骨架 | Next.js + Drizzle + Neon 接好，空应用先能一键上 Vercel | `vercel.json`、env、Deploy 按钮、CI |
 | **M1** 数据与不变量 | schema + 迁移 + seed（200 SKU + 9 埋雷）+ 库存派生 + 守恒断言 | `lib/db/*`、RC-08 |
-| **M2** 鉴权 + 出入库 + 复核 | Auth.js 三角色（登录页预填演示账号、点击即登）+ RBAC + SKU 矩阵 + 双人复核 | RC-01/02/03/06/07/09 |
+| **M2** 鉴权 + 出入库 + 审批 | Auth.js 三角色（登录页预填演示账号、点击即登）+ RBAC + SKU 矩阵 + 待复核审批闸（单人，守恒护栏） | RC-01/02/03/06/07/09 |
 | **M3** 采购单 | 状态机 + 收货回写入库 | RC-04/05 |
 | **M4** 盘点对账 + 归因 | 闭环 + 两层归因（第 2 层接 @openai/agents Agent） | AI 红线（归因/诚实兜底） |
 | **M5** AI Copilot | NL → 工具预览 → HITL → 入账 | AI 红线（越权/注入/守恒） |

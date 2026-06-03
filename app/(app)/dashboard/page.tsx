@@ -31,7 +31,7 @@ export default async function DashboardPage() {
       reconCard = { lbl: "本月盘点", val: "已平", tone: "var(--success)", sub: "差异已过账归零" };
     }
   } else {
-    reconCard = { lbl: "待复核单据", val: String(pendCount), tone: "var(--text-2)", sub: "双人复核后才入账" };
+    reconCard = { lbl: "待复核单据", val: String(pendCount), tone: "var(--text-2)", sub: "审批后才入账" };
   }
 
   const kpis = [
@@ -39,7 +39,7 @@ export default async function DashboardPage() {
     { lbl: "低库存 SKU", val: String(low.length), unit: "个", icon: "alert", tone: "var(--warn)", bg: "var(--warn-weak)", sub: `含 ${dangerN} 个断码` },
     { lbl: reconCard.lbl, val: reconCard.val, unit: "", icon: "scale", tone: reconCard.tone, bg: "var(--danger-weak)", sub: reconCard.sub },
     can.recon(user.role)
-      ? { lbl: "待复核单据", val: String(pendCount), unit: "单", icon: "clock", tone: "var(--text-2)", bg: "var(--surface-2)", sub: "录入人 ≠ 复核人" }
+      ? { lbl: "待复核单据", val: String(pendCount), unit: "单", icon: "clock", tone: "var(--text-2)", bg: "var(--surface-2)", sub: "审批后才入账" }
       : { lbl: "在售款数", val: String(styleCount), unit: "款", icon: "box", tone: "var(--teal)", bg: "var(--teal-weak)", sub: `${skus.length} 个 SKU` },
   ];
 
