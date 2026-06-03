@@ -10,5 +10,7 @@
 | [tech-stack.md](./tech-stack.md) | 技术栈选型、代码目录 / 模块职责、核心不变量 → 代码落地映射 |
 | [ux-principles.md](./ux-principles.md) | 操作台设计立场、关键交互模式、Excel 平滑迁移 |
 
+讲解 / 演示：[presentation.html](./presentation.html) —— 单文件幻灯（产品视角如何解决问题 + 技术架构），用浏览器打开、`↓ / →` 翻页，面试讲解用。
+
 参考实现：仓库根目录 `jxc-prototype.html`（单文件原型，已落地以上多数规范）。
 完整设计叙事与权衡过程见 [../reference/ai-delivery-methodology.md](../reference/ai-delivery-methodology.md)。

@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>云链进销存 · 项目讲解</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f1ece2; --surface: #fcfbf6; --surface-2: #ede7da; --border: #e2dbcc; --border-2: #cfc6b2;
+    --ink: #201b13; --text: #2c2619; --text-2: #6b6453; --text-3: #9c9379;
+    --primary: #0e5e57; --primary-600: #127068; --primary-weak: #dbece7;
+    --success: #2f7d46; --success-weak: #e3efdf;
+    --warn: #a86e14; --warn-weak: #f5e9cd;
+    --danger: #b23f2c; --danger-weak: #f2dcd4;
+    --info: #3a5a78; --info-weak: #dde6ee;
+    --teal: #0e6e63; --teal-weak: #d8ebe7;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --display: "Bricolage Grotesque", "Hanken Grotesk", "PingFang SC", sans-serif;
+    --sans: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+    --shadow: 0 1px 2px rgba(32,27,19,.05), 0 8px 26px rgba(32,27,19,.07);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans);
+    -webkit-font-smoothing: antialiased; line-height: 1.6;
+    height: 100vh; overflow-y: scroll; scroll-snap-type: y mandatory;
+  }
+  .deck { counter-reset: slide; }
+  .slide {
+    min-height: 100vh; scroll-snap-align: start; position: relative;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: clamp(28px, 6vw, 90px); padding-right: clamp(28px, 7vw, 110px);
+    border-bottom: 1px solid var(--border);
+  }
+  .slide.dark { background: var(--ink); color: #ece6d8; border-bottom-color: #2c261b; }
+  .wrap { width: 100%; max-width: 1080px; margin: 0 auto; }
+
+  /* type */
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--primary); font-weight: 500; display: flex; align-items: center; gap: 10px; }
+  .dark .eyebrow { color: #5ed2c2; }
+  .eyebrow::before { content: counter(slide, decimal-leading-zero); counter-increment: slide; color: var(--text-3); }
+  .dark .eyebrow::before { color: #7d735f; }
+  h1 { font-family: var(--display); font-weight: 800; font-size: clamp(40px, 8vw, 92px); line-height: 1.02; letter-spacing: -.02em; margin: 18px 0 0; color: var(--ink); }
+  .dark h1 { color: #fff; }
+  h2 { font-family: var(--display); font-weight: 700; font-size: clamp(26px, 4.4vw, 46px); line-height: 1.1; letter-spacing: -.015em; margin: 16px 0 0; color: var(--ink); }
+  .dark h2 { color: #fff; }
+  .lead { font-size: clamp(15px, 1.9vw, 20px); color: var(--text-2); max-width: 760px; margin: 20px 0 0; }
+  .dark .lead { color: #c3bba8; }
+  .muted { color: var(--text-3); }
+  .mono { font-family: var(--mono); }
+  b, strong { color: var(--ink); font-weight: 700; }
+  .dark b, .dark strong { color: #fff; }
+
+  /* primitives */
+  .grid { display: grid; gap: 16px; margin-top: 28px; }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g2 { grid-template-columns: repeat(2, 1fr); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; box-shadow: var(--shadow); }
+  .card h3 { margin: 0 0 6px; font-size: 16px; font-weight: 700; color: var(--ink); font-family: var(--display); }
+  .card p { margin: 0; font-size: 14px; color: var(--text-2); }
+  .kicker { font-family: var(--mono); font-size: 11.5px; color: var(--text-3); letter-spacing: .05em; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 13px; border-radius: 100px; font-size: 13px; font-weight: 600; border: 1px solid var(--border-2); background: var(--surface); color: var(--text-2); }
+  .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .chips { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
+  .tone-info { color: var(--info); background: var(--info-weak); border-color: transparent; }
+  .tone-warn { color: var(--warn); background: var(--warn-weak); border-color: transparent; }
+  .tone-teal { color: var(--teal); background: var(--teal-weak); border-color: transparent; }
+  .tone-danger { color: var(--danger); background: var(--danger-weak); border-color: transparent; }
+  .tone-success { color: var(--success); background: var(--success-weak); border-color: transparent; }
+  .tone-primary { color: var(--primary); background: var(--primary-weak); border-color: transparent; }
+
+  /* quote */
+  .quote { margin-top: 30px; border-left: 3px solid var(--primary-600); padding: 6px 0 6px 22px; font-size: clamp(17px, 2.4vw, 24px); font-family: var(--display); font-weight: 600; color: var(--ink); max-width: 820px; }
+  .dark .quote { color: #fff; border-color: #5ed2c2; }
+  .quote span { color: var(--text-3); font-weight: 500; font-size: 14px; font-family: var(--sans); display: block; margin-top: 8px; }
+
+  /* before/after */
+  .ba { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center; margin-top: 30px; }
+  .ba .box { border-radius: 14px; padding: 22px; border: 1px dashed var(--border-2); background: var(--surface); }
+  .ba .bad { border-color: #d9b9b0; background: #f7ece8; }
+  .ba .good { border-color: #b6d3c6; background: var(--success-weak); border-style: solid; }
+  .ba .box .t { font-size: 12px; font-family: var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+  .ba .box .v { font-family: var(--mono); font-size: clamp(15px, 2vw, 20px); margin-top: 10px; color: var(--ink); }
+  .ba .arrow { font-size: 28px; color: var(--primary-600); }
+
+  /* big stat row */
+  .stats { display: grid; grid-template-columns: 1.1fr auto 1fr auto 1fr; gap: 14px; align-items: stretch; margin-top: 30px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; box-shadow: var(--shadow); }
+  .stat .k { font-size: 12.5px; color: var(--text-3); }
+  .stat .n { font-family: var(--mono); font-weight: 500; font-size: clamp(24px, 3.6vw, 38px); letter-spacing: -.01em; margin-top: 8px; }
+  .stat .s { font-size: 12px; color: var(--text-3); margin-top: 4px; }
+  .stat.neg .n { color: var(--danger); }
+  .stat.real .n { color: var(--danger); }
+  .stat.recover .n { color: var(--warn); }
+  .op { display: grid; place-items: center; font-size: 22px; color: var(--text-3); font-family: var(--display); }
+
+  /* bucket list */
+  .buckets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 24px; }
+  .bk { background: var(--surface); border: 1px solid var(--border); border-radius: 13px; padding: 15px 16px; }
+  .bk .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .bk .name { font-weight: 700; font-size: 14px; color: var(--ink); }
+  .bk .do { font-size: 12.5px; color: var(--text-2); margin-top: 7px; }
+  .bk .tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 100px; }
+
+  /* flow */
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 26px; }
+  .flow .step { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 11px 15px; font-size: 13.5px; font-weight: 600; color: var(--ink); box-shadow: var(--shadow); }
+  .flow .step .sub { display: block; font-size: 11px; color: var(--text-3); font-weight: 500; margin-top: 2px; }
+  .flow .sep { color: var(--primary-600); font-size: 18px; font-weight: 700; }
+
+  /* layers */
+  .layers { display: flex; flex-direction: column; gap: 12px; margin-top: 26px; }
+  .layer { display: grid; grid-template-columns: 86px 1fr; gap: 18px; align-items: center; border: 1px solid var(--border); border-radius: 14px; padding: 16px 20px; background: var(--surface); box-shadow: var(--shadow); }
+  .layer .lvl { font-family: var(--mono); font-weight: 700; font-size: 18px; color: var(--primary-600); }
+  .layer .body .name { font-weight: 700; color: var(--ink); font-size: 15px; }
+  .layer .body .desc { font-size: 13px; color: var(--text-2); margin-top: 3px; }
+  .layer .body .files { font-family: var(--mono); font-size: 11.5px; color: var(--text-3); margin-top: 5px; }
+  .layer.l0 { background: var(--primary-weak); border-color: #bfded7; }
+
+  /* checklist */
+  .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 26px; margin-top: 26px; }
+  .check { display: flex; gap: 11px; align-items: flex-start; font-size: 14.5px; color: var(--text); padding: 5px 0; }
+  .check .ic { flex: none; width: 22px; height: 22px; border-radius: 7px; background: var(--success-weak); color: var(--success); display: grid; place-items: center; font-weight: 800; margin-top: 1px; }
+
+  .note { margin-top: 22px; font-size: 13.5px; color: var(--text-2); background: var(--surface-2); border-radius: 10px; padding: 12px 16px; display: inline-block; }
+  .dark .note { background: rgba(255,255,255,.06); color: #c3bba8; }
+
+  .demo-card { margin-top: 30px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 22px 26px; box-shadow: var(--shadow); display: flex; flex-wrap: wrap; gap: 26px; align-items: center; }
+  .demo-card .url { font-family: var(--mono); font-size: 15px; color: var(--primary); font-weight: 500; }
+  .acct { font-family: var(--mono); font-size: 12.5px; color: var(--text-2); }
+  .acct b { color: var(--ink); }
+
+  /* nav */
+  .progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--primary-600); width: 0; z-index: 50; transition: width .2s; }
+  .dots { position: fixed; right: 20px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 11px; z-index: 50; }
+  .dots a { width: 9px; height: 9px; border-radius: 50%; background: var(--border-2); transition: all .2s; display: block; }
+  .dots a.on { background: var(--primary-600); transform: scale(1.35); }
+  .counter { position: fixed; bottom: 18px; right: 22px; font-family: var(--mono); font-size: 12px; color: var(--text-3); z-index: 50; }
+  .hint { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); font-family: var(--mono); font-size: 11.5px; color: var(--text-3); letter-spacing: .05em; }
+
+  @media (max-width: 760px) {
+    .g3, .g2, .buckets { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: 1fr; } .op { display: none; }
+    .ba { grid-template-columns: 1fr; } .ba .arrow { transform: rotate(90deg); justify-self: center; }
+    .checks { grid-template-columns: 1fr; }
+    .dots { display: none; }
+    .layer { grid-template-columns: 54px 1fr; gap: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<nav class="dots" id="dots"></nav>
+<div class="counter" id="counter"></div>
+
+<div class="deck" id="deck">
+
+  <!-- 1 · 封面 -->
+  <section class="slide dark">
+    <div class="wrap">
+      <div class="eyebrow">AI-Native 进销存系统 · 服装批发</div>
+      <h1>云链进销存</h1>
+      <p class="lead">把库存从「可被覆盖的数字」重构为<b>由不可变流水累加出的派生值</b>——用守恒不变量 + 待复核审批闸，从结构上消灭错账；并让 AI 经类型化工具层成为系统的<b>一等操作者</b>。</p>
+      <div class="quote">“我们做服装批发，仓库 8 个人用 Excel 记库存，上月盘点差了三万多。”
+        <span>—— 客户原话，也是这个项目要解决的核心问题</span>
+      </div>
+    </div>
+    <div class="hint">↓ / → 翻页 · 空格继续</div>
+  </section>
+
+  <!-- 2 · 问题 -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="eyebrow">问题</div>
+      <h2>病根不在“算错”，在 Excel 的数据模型</h2>
+      <p class="lead">把库存存成“一个可以随手改的数字”，决定了它一定会漂移。三个结构性缺陷：</p>
+      <div class="grid g3">
+        <div class="card"><div class="kicker">缺陷 01</div><h3>可被覆盖</h3><p>库存是一个能直接改写的数字，改了就没了原值——没有“为什么从 120 变成 95”。</p></div>
+        <div class="card"><div class="kicker">缺陷 02</div><h3>无留痕</h3><p>谁、何时、依据哪张单改的，查无可查；月底对不上时，没人能复盘“差在哪”。</p></div>
+        <div class="card"><div class="kicker">缺陷 03</div><h3>无复核</h3><p>8 人并发录入、没有第二双眼，单点错误悄悄进账、层层累积。</p></div>
+      </div>
+      <div class="note">结果：账面与实物逐月漂移 → 盘点“差三万”，<b>而且不知道差在哪、也追不回</b>。</div>
+    </div>
+  </section>
+
+  <!-- 3 · 立意 -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="eyebrow">解法立意</div>
+      <h2>库存是“派生值”，不是“存储值”</h2>
+      <p class="lead">一个根本转变：不再存库存数字，而是<b>只追加不可变流水</b>，库存由流水实时累加得出。</p>
+      <div class="ba">
+        <div class="box bad">
+          <div class="t">Excel / 传统 CRUD</div>
+          <div class="v">stock.qty = 120<br><span class="muted">← UPDATE 可覆盖，原值丢失</span></div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="box good">
+          <div class="t">云链 · append-only ledger</div>
+          <div class="v">库存 = Σ ledger.delta<br><span class="muted">← 只能追加流水，永不覆盖</span></div>
+        </div>
+      </div>
+      <div class="chips">
+        <span class="chip tone-primary"><span class="dot"></span>I1　期初 + 入库 − 出库 = 期末</span>
+        <span class="chip tone-primary"><span class="dot"></span>I2　库存 = 流水累加（单一真相）</span>
+        <span class="chip tone-success"><span class="dot"></span>纠错只能红冲，原始错误永久留痕</span>
+      </div>
+      <div class="note">错账不再“被覆盖消失”，而是“留痕、可复盘、可追溯”——这就是治“差三万”的<b>物理基础</b>。</div>
+    </div>
+  </section>
+
+  <!-- 4 · 产品全景 -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="eyebrow">产品全景</div>
+      <h2>一条主链路，三个角色</h2>
+      <div class="flow">
+        <span class="step">入库<span class="sub">采购到货 / 录入</span></span><span class="sep">→</span>
+        <span class="step">库存预警<span class="sub">低库存 / 断码</span></span><span class="sep">→</span>
+        <span class="step">采购补货<span class="sub">采购单状态机</span></span><span class="sep">→</span>
+        <span class="step">出库<span class="sub">销售 / 调拨</span></span><span class="sep">→</span>
+        <span class="step">盘点对账<span class="sub">AI 两层归因</span></span>
+      </div>
+      <div class="grid g3">
+        <div class="card"><h3>库存矩阵</h3><p>款号 × 颜色 × 尺码三维，点任意格子看该 SKU 的全部流水链。</p></div>
+        <div class="card"><h3>出入库 + 审批</h3><p>像 Excel 一样矩阵录入；改库先进“待复核”，审批后才入账。</p></div>
+        <div class="card"><h3>采购单状态机</h3><p>草稿 → 已下单 → 部分到货 → 已入库；到货量由流水派生回写。</p></div>
+        <div class="card"><h3>盘点对账</h3><p>账面快照 vs 实盘，AI 把差异拆成可执行的几摞。</p></div>
+        <div class="card"><h3>AI 助手</h3><p>一句话查库存 / 连续出入库 / 对账，全程经类型化工具。</p></div>
+        <div class="card"><h3>数据层权限</h3><p>三角色 RBAC，成本价对仓管字段级脱敏。</p></div>
+      </div>
+      <div class="chips">
+        <span class="chip"><span class="dot" style="color:var(--info)"></span>仓管 · 只看库存 + 录出入库（成本脱敏）</span>
+        <span class="chip"><span class="dot" style="color:var(--warn)"></span>采购 · 采购单 + 对账</span>
+        <span class="chip"><span class="dot" style="color:var(--primary)"></span>老板 · 全局 + 盘点过账</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 · 招牌场景 -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="eyebrow">招牌场景</div>
+      <h2>AI 把“差三万”拆成可执行的几摞</h2>
+      <p class="lead">同一份盘点差异，<b>第 1 层确定性检测器</b>给出权威分桶与金额，<b>第 2 层 LLM</b> 按需排序解释。</p>
+      <div class="stats">
+        <div class="stat neg"><div class="k">盘亏毛额（账面看着差这么多）</div><div class="n">−¥31,038</div><div class="s">≈ 客户说的“差了三万多”</div></div>
+        <div class="op">→</div>
+        <div class="stat real"><div class="k">真实物净损失</div><div class="n">−¥12,040</div><div class="s">失窃 / 损耗，该认</div></div>
+        <div class="op">+</div>
+        <div class="stat recover"><div class="k">可追回</div><div class="n">−¥9,326</div><div class="s">供应商少发 + 疑错发</div></div>
+      </div>
+      <div class="buckets">
+        <div class="bk"><div class="top"><span class="name">串色 · 货在</span><span class="tag tone-info">净值 0</span></div><div class="do">同款等量反向 → 一键互换归零，不是损失。</div></div>
+        <div class="bk"><div class="top"><span class="name">重复入库</span><span class="tag tone-warn">账面虚高</span></div><div class="do">同到货单两笔 → 红冲其中一笔。</div></div>
+        <div class="bk"><div class="top"><span class="name">供应商少发</span><span class="tag tone-warn">可索赔</span></div><div class="do">照单全收却未点数 → 记盘亏 + 向供应商追。</div></div>
+        <div class="bk"><div class="top"><span class="name">疑错发</span><span class="tag tone-warn">待核实</span></div><div class="do">近期大额出库异常 → 核实签收、向客户追回。</div></div>
+        <div class="bk"><div class="top"><span class="name">在途未录</span><span class="tag tone-teal">假差异</span></div><div class="do">快照后才入账的到货 → 纳入盘点即归零。</div></div>
+        <div class="bk"><div class="top"><span class="name">实物损耗</span><span class="tag tone-danger">真损失</span></div><div class="do">检测器全不命中 → 诚实兜底，建议核查货位。</div></div>
+      </div>
+      <div class="note">原则：<b>归因质量 = 留痕质量</b>。每笔流水带 经手人/时间/单号/扫码/质检/采购关联——治错账的留痕，恰好喂养了 AI；查不到就老实说“无解释”，<b>绝不编原因</b>。</div>
+    </div>
+  </section>
+
+  <!-- 6 · AI-Native -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="eyebrow">AI-Native</div>
+      <h2>自然语言 → 连续操作 → 审批入账</h2>
+      <p class="lead">AI 在一轮对话里能<b>连续完成多步</b>（agent loop），写操作直接生成待复核单，全程把<b>思考 / 工具调用 / 回答</b>实时流式展示。</p>
+      <div class="flow">
+        <span class="step">一句话<span class="sub">“快断货的都补到 30”</span></span><span class="sep">→</span>
+        <span class="step">Agent 一轮多步<span class="sub">low_stock + 5×record_move</span></span><span class="sep">→</span>
+        <span class="step">生成待复核单<span class="sub">不直接落库</span></span><span class="sep">→</span>
+        <span class="step">任意人审批<span class="sub">单人即可</span></span><span class="sep">→</span>
+        <span class="step">入账<span class="sub">守恒护栏兜底</span></span>
+      </div>
+      <div class="grid g3">
+        <div class="card"><h3>只调类型化工具</h3><p>AI 不写裸 SQL、不直接落库；输出只能映射到白名单 <span class="mono">tool()</span>。</p></div>
+        <div class="card"><h3>审批闸 = HITL</h3><p>写操作先进待复核、人工审批后才入账——既是治错账的复核，也是 AI 的安全闸。</p></div>
+        <div class="card"><h3>第 2 层归因解释</h3><p>差异抽屉里 LLM 基于第 1 层证据排序解释，降级安全、不改结论。</p></div>
+      </div>
+      <div class="note mono" style="font-family:var(--mono)">“看看哪些快断货了，都补到 30” → 一轮内 5 张入库待复核单：米白/S +30、墨绿/M +18 …</div>
+    </div>
+  </section>
+
+  <!-- 7 · 硬约束 -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="eyebrow">硬约束（不可妥协）</div>
+      <h2>把“正确”焊进结构，而不是靠自觉</h2>
+      <div class="checks">
+        <div class="check"><span class="ic">✓</span><div><b>库存不可直接编辑</b>，只能追加流水；无 <span class="mono">UPDATE stock.qty</span> 入口。</div></div>
+        <div class="check"><span class="ic">✓</span><div><b>流水只增不改不删</b>；纠错用红冲，原始错误永久留痕。</div></div>
+        <div class="check"><span class="ic">✓</span><div>守恒不变量随时成立：<b>I1 / I2</b>。</div></div>
+        <div class="check"><span class="ic">✓</span><div>改库需<b>审批入账</b>（单人即可）；入账经<b>原子守恒护栏</b>，并发出库也打不穿。</div></div>
+        <div class="check"><span class="ic">✓</span><div>金额一律<b>整数分</b>，仅展示层 /100。</div></div>
+        <div class="check"><span class="ic">✓</span><div>待复核草稿存于独立 <span class="mono">move_draft</span>，与不可变流水<b>物理隔离</b>。</div></div>
+        <div class="check"><span class="ic">✓</span><div><b>AI 不写裸 SQL、不直接落库</b>，只走类型化工具。</div></div>
+        <div class="check"><span class="ic">✓</span><div>权限在<b>数据层</b>生效：RBAC + 成本字段脱敏（不进响应体）。</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 · 技术架构 -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="eyebrow">技术架构</div>
+      <h2>四层，AI 只能走“门”</h2>
+      <div class="layers">
+        <div class="layer"><div class="lvl">L3</div><div class="body"><div class="name">体验层</div><div class="desc">角色化页面（RSC）+ AI 助手侧栏（流式：思考 / 工具 / 回答）</div><div class="files">app/(app)/* · components/* · app/api/copilot（NDJSON 流）</div></div></div>
+        <div class="layer"><div class="lvl">L2</div><div class="body"><div class="name">Agent 编排</div><div class="desc">NL → 意图 → 工具循环（一轮多步）→ 待复核审批；copilot 手写流式循环</div><div class="files">lib/ai/copilot.ts · lib/ai/explain.ts</div></div></div>
+        <div class="layer"><div class="lvl">L1</div><div class="body"><div class="name">类型化工具层</div><div class="desc">每个工具 = 一道带 守恒 + 权限 + 审计 校验的门；UI 与 AI 复用同一套</div><div class="files">lib/actions.ts · lib/ai/tools.ts（Zod schema）</div></div></div>
+        <div class="layer l0"><div class="lvl">L0</div><div class="body"><div class="name">数据与不变量</div><div class="desc">不可变流水 + 库存守恒 I1/I2 + RBAC；库存恒为派生值</div><div class="files">lib/db/{schema,ledger,draft,queries} · Drizzle / Neon Postgres</div></div></div>
+      </div>
+      <div class="note">关键：权限不是“前端藏按钮”、也不是“提示词约束 AI”，而是<b>工具层物理拒绝</b>——仓管的 copilot 想下采购单，工具直接拒。</div>
+    </div>
+  </section>
+
+  <!-- 9 · 技术栈 & 工程 -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="eyebrow">技术栈 & 工程化</div>
+      <h2>一键部署、可回归、serverless</h2>
+      <div class="chips">
+        <span class="chip">Next.js 16 · App Router/RSC/Server Actions</span>
+        <span class="chip">React 19</span>
+        <span class="chip">TypeScript strict</span>
+        <span class="chip">Drizzle ORM</span>
+        <span class="chip">Neon serverless Postgres</span>
+        <span class="chip">Auth.js v5</span>
+        <span class="chip">Tailwind v4</span>
+        <span class="chip">OpenAI 兼容网关 · gpt-5.5</span>
+        <span class="chip">Streamdown</span>
+        <span class="chip">Vitest</span>
+        <span class="chip">Vercel</span>
+      </div>
+      <div class="grid g3">
+        <div class="card"><h3>数据模型</h3><p><span class="mono">stock_ledger</span>（不可变）·<span class="mono">move_draft</span>（待复核）·<span class="mono">sku</span>·<span class="mono">purchase_order</span>·<span class="mono">stocktake</span>。</p></div>
+        <div class="card"><h3>可回归</h3><p>库存守恒（I1/I2）+ 6 类归因检测器常驻 Vitest；typecheck / lint / build 全绿。</p></div>
+        <div class="card"><h3>一键部署</h3><p>连 GitHub → Vercel 自动建表 + 灌 seed；本地与线上同一 Neon 库。</p></div>
+        <div class="card"><h3>实时思考</h3><p>网关 <span class="mono">reasoning_content</span> 逐字流出；手写循环捕获并展示。</p></div>
+        <div class="card"><h3>并行工具</h3><p>agent loop + parallel tool calls，一轮多笔补货一并发出。</p></div>
+        <div class="card"><h3>降级安全</h3><p>无 API key 时 AI 优雅降级（仅确定性检测器），应用照常可用。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 · 统一论点 + 收尾 -->
+  <section class="slide dark">
+    <div class="wrap">
+      <div class="eyebrow">一个统一论点</div>
+      <h2 style="max-width:920px">为让 AI 安全所必须建的地基，恰好就是治“盘点差三万”本就该建的那一套。</h2>
+      <p class="lead">不可变流水当审计 · 库存守恒当护栏 · 待复核审批当 human-in-the-loop · 类型化工具当边界——好的传统架构与 AI-Native 架构，在这里<b>收敛为一个</b>。换个行业（餐饮 / 零售），把“款 × 色 × 码”换成对应维度、重写守恒不变量，这套流程能原样再跑一遍。</p>
+      <div class="demo-card">
+        <div>
+          <div class="kicker" style="color:var(--text-3)">在线体验</div>
+          <div class="url">youzan-i-bowlingqs-projects.vercel.app</div>
+        </div>
+        <div class="acct">
+          演示账号（登录页已预填，点击即登）<br>
+          <b>warehouse@demo.com</b> · 仓管　<b>buyer@demo.com</b> · 采购　<b>admin@demo.com</b> · 老板<br>
+          密码均 <b>demo1234</b>
+        </div>
+      </div>
+    </div>
+    <div class="hint">谢谢 · 欢迎提问</div>
+  </section>
+
+</div>
+
+<script>
+  (function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    var deck = document.body; // scroll container is body
+    var dots = document.getElementById('dots');
+    var progress = document.getElementById('progress');
+    var counter = document.getElementById('counter');
+    var n = slides.length, cur = 0;
+
+    slides.forEach(function (s, i) {
+      var a = document.createElement('a');
+      a.href = '#'; a.setAttribute('aria-label', '第 ' + (i + 1) + ' 页');
+      a.addEventListener('click', function (e) { e.preventDefault(); go(i); });
+      dots.appendChild(a);
+    });
+    var dotEls = Array.prototype.slice.call(dots.children);
+
+    function setActive(i) {
+      cur = i;
+      dotEls.forEach(function (d, k) { d.classList.toggle('on', k === i); });
+      counter.textContent = String(i + 1).padStart(2, '0') + ' / ' + String(n).padStart(2, '0');
+      progress.style.width = ((i) / (n - 1) * 100) + '%';
+    }
+    function go(i) { i = Math.max(0, Math.min(n - 1, i)); slides[i].scrollIntoView({ behavior: 'smooth' }); }
+
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting && en.intersectionRatio >= 0.55) setActive(slides.indexOf(en.target));
+      });
+    }, { threshold: [0.55] });
+    slides.forEach(function (s) { io.observe(s); });
+
+    document.addEventListener('keydown', function (e) {
+      if (['ArrowDown', 'ArrowRight', 'PageDown', ' '].indexOf(e.key) >= 0) { e.preventDefault(); go(cur + 1); }
+      else if (['ArrowUp', 'ArrowLeft', 'PageUp'].indexOf(e.key) >= 0) { e.preventDefault(); go(cur - 1); }
+      else if (e.key === 'Home') { e.preventDefault(); go(0); }
+      else if (e.key === 'End') { e.preventDefault(); go(n - 1); }
+    });
+    setActive(0);
+  })();
+</script>
+</body>
+</html>
