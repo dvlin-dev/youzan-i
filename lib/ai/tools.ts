@@ -70,8 +70,8 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
     {
       name: "low_stock",
       description:
-        "列出低于安全库存（含断码=0）的 SKU；要补货 / 问『哪些快断货』时先调它。" +
-        "每条带齐 款号/颜色/尺码/当前库存/安全库存——这些就能直接喂给 record_move 补货，不必再向用户要色码。",
+        "列出低于安全库存（含断码=0）的 SKU，每条带齐 款号/颜色/尺码/当前库存/安全库存。" +
+        "用户问『哪些快断货 / 要补货 / 要补哪些』时用。",
       schema: z.object({}),
       execute: async () => {
         const sm = await stockMap();
@@ -122,8 +122,8 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
     specs.push({
       name: "record_move",
       description:
-        "登记一笔入库(IN)或出库(OUT)，生成『待复核单』。审批后才入账，所以你可以直接登记、不必在对话里再让用户确认。" +
-        "一轮里可多次调用，把多笔（如多个低库存 SKU 的补货）一并登记。",
+        "登记一笔入库(IN)或出库(OUT)，生成『待复核单』（审批后才入账）。" +
+        "用户要『入/出/登记/补货 某 SKU N 件』时用；登记多笔就多次调用。",
       schema: z.object({
         type: z
           .enum(["IN", "OUT"])
@@ -139,9 +139,7 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
           .number()
           .int()
           .positive()
-          .describe(
-            "这一笔的件数（正整数）。补货到 N 件时填 N−当前库存（当前库存先用 low_stock / query_stock 查）",
-          ),
+          .describe("这一笔的件数（正整数，如 30）"),
       }),
       execute: async (a) => {
         const type = a.type === "OUT" ? "OUT" : "IN";
