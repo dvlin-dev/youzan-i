@@ -65,6 +65,8 @@ export const can = {
   cost: (role: Role) => role !== "warehouse",
   recon: (role: Role) => role !== "warehouse",
   po: (role: Role) => role !== "warehouse",
+  // 商品档案（建款 / 改价 / 改安全库存）：采购 + 老板。仓管只录出入库，不碰主数据与定价。
+  sku: (role: Role) => role !== "warehouse",
   move: (role: Role) => role !== "buyer",
   postStocktake: (role: Role) => role === "admin",
 };

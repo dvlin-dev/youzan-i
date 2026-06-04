@@ -6,6 +6,7 @@ import { currentUser } from "@/lib/session";
 export default async function StockPage() {
   const user = (await currentUser())!;
   const canCost = can.cost(user.role);
+  const canManage = can.sku(user.role);
   const [skus, sm] = await Promise.all([allSkus(), stockMap()]);
   const rows: SkuRow[] = skus.map((s) => ({
     skuCode: s.skuCode,
@@ -20,5 +21,5 @@ export default async function StockPage() {
     qty: sm[s.skuCode] ?? 0,
     level: levelOf(sm[s.skuCode] ?? 0, s.safetyStock),
   }));
-  return <StockBrowser skus={rows} canCost={canCost} />;
+  return <StockBrowser skus={rows} canCost={canCost} canManage={canManage} />;
 }

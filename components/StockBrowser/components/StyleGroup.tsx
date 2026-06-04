@@ -8,12 +8,14 @@ import { SizeMatrix } from "./SizeMatrix";
 export function StyleGroup({
   g,
   canCost,
+  canManage,
   isOpen,
   onToggle,
   onOpen,
 }: {
   g: StyleGroupT;
   canCost: boolean;
+  canManage: boolean;
   isOpen: boolean | undefined;
   onToggle: () => void;
   onOpen: (skuCode: string) => void;
@@ -69,7 +71,7 @@ export function StyleGroup({
           </div>
         </div>
       </div>
-      {isOpen && <SizeMatrix g={g} onOpen={onOpen} />}
+      {isOpen && <SizeMatrix g={g} canManage={canManage} onOpen={onOpen} />}
     </div>
   );
 }

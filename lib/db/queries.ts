@@ -5,6 +5,7 @@ import {
   type MoveDraft,
   type Sku,
   type StockLedger,
+  appUser,
   moveDraft,
   poLine,
   purchaseOrder,
@@ -16,6 +17,16 @@ import {
 
 export async function allSkus(): Promise<Sku[]> {
   return db.select().from(sku);
+}
+
+/** 用户 id → 姓名映射：流水/单据里存的是 user.id（外键），展示时按此取名。 */
+export async function userNames(): Promise<Record<string, string>> {
+  const rows = await db
+    .select({ id: appUser.id, name: appUser.name })
+    .from(appUser);
+  const m: Record<string, string> = {};
+  for (const r of rows) m[r.id] = r.name;
+  return m;
 }
 
 /** 库存 = 流水累加（仅 posted）。返回 skuCode → 数量。 */

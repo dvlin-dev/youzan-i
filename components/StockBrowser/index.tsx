@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 
+import { CreateSkuForm } from "@/components/CreateSkuForm";
 import { LedgerDrawer } from "@/components/LedgerDrawer";
 import { Icon } from "@/components/icons";
 import { filterStyleGroups, groupSkusByStyle } from "@/lib/stock-view";
@@ -13,17 +14,25 @@ export type { SkuRow } from "./types";
 export function StockBrowser({
   skus,
   canCost,
+  canManage = false,
 }: {
   skus: SkuRow[];
   canCost: boolean;
+  canManage?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [drawer, setDrawer] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const styles = useMemo(() => groupSkusByStyle(skus), [skus]);
   const list = filterStyleGroups(styles, { q, lowOnly });
+  const styleNos = useMemo(() => styles.map((g) => g.styleNo), [styles]);
+  const categories = useMemo(
+    () => [...new Set(skus.map((s) => s.category))],
+    [skus],
+  );
 
   return (
     <>
@@ -55,6 +64,11 @@ export function StockBrowser({
         <div style={{ marginLeft: "auto" }} className="dim">
           共 {skus.length} 个 SKU · {styles.length} 款
         </div>
+        {canManage && (
+          <button className="btn primary sm" onClick={() => setCreating(true)}>
+            <Icon name="box" size={14} /> 建档
+          </button>
+        )}
       </div>
 
       {list.length === 0 && (
@@ -71,6 +85,7 @@ export function StockBrowser({
           key={g.styleNo}
           g={g}
           canCost={canCost}
+          canManage={canManage}
           isOpen={open[g.styleNo]}
           onToggle={() =>
             setOpen((o) => ({ ...o, [g.styleNo]: !o[g.styleNo] }))
@@ -84,6 +99,14 @@ export function StockBrowser({
           skuCode={drawer}
           canCost={canCost}
           onClose={() => setDrawer(null)}
+        />
+      )}
+
+      {creating && (
+        <CreateSkuForm
+          existingStyleNos={styleNos}
+          categories={categories}
+          onClose={() => setCreating(false)}
         />
       )}
     </>

@@ -24,6 +24,7 @@ import {
   ledgerOf,
   receivedByPo,
   stockMap,
+  userNames,
 } from "./db/queries";
 import {
   type Sku,
@@ -98,7 +99,7 @@ export async function submitMove(raw: MoveInput): Promise<Result> {
         delta: input.type === "IN" ? e.qty : -e.qty,
         bizType: input.type === "IN" ? "采购到货" : "销售出库",
         docNo: doc,
-        operatorId: u.name,
+        operatorId: u.id,
         scanned: true,
       })),
     );
@@ -120,7 +121,7 @@ export async function reviewDoc(doc: string): Promise<Result> {
     const rows = await getDraft(doc);
     if (!rows.length) return { ok: false, msg: "单据不存在或已处理" };
 
-    const posted = await postDraftAtomic(doc, u.name);
+    const posted = await postDraftAtomic(doc, u.id);
     if (!posted.length) {
       // 被守恒拦截：定位首个会打穿库存的 SKU，给出可读提示
       const sm = await stockMap();
@@ -204,7 +205,7 @@ export async function receivePO(poNo: string): Promise<Result> {
         delta: l.ordered - l.received,
         bizType: "采购到货",
         docNo: doc,
-        operatorId: u.name,
+        operatorId: u.id,
         poRef: poNo,
         qc: true,
         scanned: true,
@@ -247,7 +248,7 @@ export async function createPO(raw: PoInput): Promise<Result> {
       poNo,
       supplier: input.supplier,
       status: "草稿",
-      createdBy: u.name,
+      createdBy: u.id,
       eta: input.eta || null,
     });
     await db.insert(poLine).values(
@@ -283,6 +284,91 @@ export async function submitPO(poNo: string): Promise<Result> {
       .where(eq(purchaseOrder.poNo, poNo));
     revalidateAll();
     return { ok: true, msg: `${poNo} 已下单，可登记到货` };
+  });
+}
+
+const SkuInput = z.object({
+  styleNo: z.string().trim().min(1, "请填款号"),
+  styleName: z.string().trim().min(1, "请填品名"),
+  category: z.string().trim().min(1, "请填品类"),
+  costPrice: z.number().int().nonnegative(), // 整数分
+  tagPrice: z.number().int().nonnegative(), // 整数分
+  safetyStock: z.number().int().nonnegative(),
+  colors: z.array(z.string().trim().min(1)).min(1, "请至少选一个颜色"),
+  sizes: z.array(z.string().trim().min(1)).min(1, "请至少选一个尺码"),
+});
+export type SkuInput = z.infer<typeof SkuInput>;
+
+/**
+ * 建档：为一个款按 颜色 × 尺码 批量生成 SKU。库存从 0 起（建档不造流水，靠入库/采购累加），
+ * 因此新款会以「断码」呈现，符合「库存 = 流水累加」——建档只是登记主数据。已存在的 款/色/码 跳过。
+ */
+export async function createSku(raw: SkuInput): Promise<Result> {
+  return tryResult(async () => {
+    const u = await requireUser();
+    if (!can.sku(u.role)) return { ok: false, msg: "无权管理商品档案" };
+    const input = SkuInput.parse(raw);
+    const colors = [...new Set(input.colors.map((c) => c.trim()))].filter(
+      Boolean,
+    );
+    const sizes = [...new Set(input.sizes.map((s) => s.trim()))].filter(
+      Boolean,
+    );
+    if (!colors.length || !sizes.length)
+      return { ok: false, msg: "颜色和尺码都至少选一个" };
+    const existing = new Set((await allSkus()).map((s) => s.skuCode));
+    const stamp = String(Date.now()).slice(-9);
+    let bc = 0;
+    const rows: (typeof sku.$inferInsert)[] = [];
+    for (const c of colors)
+      for (const sz of sizes) {
+        const skuCode = `${input.styleNo}-${c}-${sz}`;
+        if (existing.has(skuCode)) continue;
+        rows.push({
+          skuCode,
+          styleNo: input.styleNo,
+          styleName: input.styleName,
+          category: input.category,
+          color: c,
+          size: sz,
+          costPrice: input.costPrice,
+          tagPrice: input.tagPrice,
+          safetyStock: input.safetyStock,
+          barcode: "69" + stamp + String(bc++).padStart(2, "0"),
+        });
+      }
+    if (!rows.length)
+      return { ok: false, msg: "这些 款/色/码 组合已全部存在，无需重复建档" };
+    await db.insert(sku).values(rows);
+    revalidateAll();
+    return {
+      ok: true,
+      msg: `已建档「${input.styleName}」：新增 ${rows.length} 个 SKU（库存 0，去入库/采购补货）`,
+    };
+  });
+}
+
+/** 改安全库存：把某款下所有 SKU 的预警阈值统一设为新值（预警 = 库存 < 安全库存）。 */
+export async function setStyleSafetyStock(
+  styleNo: string,
+  safetyStock: number,
+): Promise<Result> {
+  return tryResult(async () => {
+    const u = await requireUser();
+    if (!can.sku(u.role)) return { ok: false, msg: "无权管理商品档案" };
+    if (!Number.isInteger(safetyStock) || safetyStock < 0)
+      return { ok: false, msg: "安全库存须为非负整数" };
+    const res = await db
+      .update(sku)
+      .set({ safetyStock })
+      .where(eq(sku.styleNo, styleNo))
+      .returning({ skuCode: sku.skuCode });
+    if (!res.length) return { ok: false, msg: "未找到该款" };
+    revalidateAll();
+    return {
+      ok: true,
+      msg: `已更新安全库存为 ${safetyStock} 件（${res.length} 个 SKU）`,
+    };
   });
 }
 
@@ -337,7 +423,7 @@ export async function adoptStocktakeRow(skuCode: string): Promise<Result> {
     if (!view) return { ok: false, msg: "无盘点单" };
     const n = await postRows(
       [skuCode],
-      u.name,
+      u.id,
       view.stocktake.pdNo,
       view.stocktake.counter,
     );
@@ -364,7 +450,7 @@ export async function postAllStocktake(): Promise<Result> {
     const keys = view.rows.filter((r) => !r.resolved).map((r) => r.skuCode);
     const n = await postRows(
       keys,
-      u.name,
+      u.id,
       view.stocktake.pdNo,
       view.stocktake.counter,
     );
@@ -401,8 +487,8 @@ export async function createStocktake(scope = "全仓盘点"): Promise<Result> {
       scope,
       status: "待复核",
       snapTs: now,
-      counter: u.name,
-      createdBy: u.name,
+      counter: u.id,
+      createdBy: u.id,
       countedAt: now,
     });
     await db.insert(stocktakeCount).values(
@@ -510,13 +596,19 @@ function maskCost(s: Sku): Omit<Sku, "costPrice"> {
   return copy as Omit<Sku, "costPrice">;
 }
 
-/** 抽屉用：取某 SKU 的元信息 + 完整流水链（成本价按角色脱敏）。 */
+/** 抽屉用：取某 SKU 的元信息 + 完整流水链（成本价按角色脱敏；操作人/复核人 id → 姓名）。 */
 export async function fetchLedger(skuCode: string) {
   const u = await requireUser();
   const [s] = await db.select().from(sku).where(eq(sku.skuCode, skuCode));
   const safeSku = s ? (can.cost(u.role) ? s : maskCost(s)) : null;
-  const rows = await ledgerOf(skuCode);
-  return { sku: safeSku, rows };
+  const [rows, names] = await Promise.all([ledgerOf(skuCode), userNames()]);
+  // 流水存的是 user.id（外键）；展示层解析成姓名（查无则回退显示原 id，不丢可追溯线索）。
+  const display = rows.map((r) => ({
+    ...r,
+    operatorId: names[r.operatorId] ?? r.operatorId,
+    reviewerId: r.reviewerId ? (names[r.reviewerId] ?? r.reviewerId) : null,
+  }));
+  return { sku: safeSku, rows: display };
 }
 
 /**

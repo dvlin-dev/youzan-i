@@ -9,12 +9,13 @@ import { type Role, can } from "../lib/constants";
 const ROLES: Role[] = ["warehouse", "buyer", "admin"];
 
 describe("RBAC 权限矩阵 can.*（RC-06 / 越权红线）", () => {
-  // 期望矩阵：仓管只读库存+录出入库（无成本/采购/盘点）；采购看成本+采购+对账（不录出入库）；老板全开。
+  // 期望矩阵：仓管只读库存+录出入库（无成本/采购/盘点/档案）；采购看成本+采购+对账+档案（不录出入库）；老板全开。
   const expected: Record<Role, Record<keyof typeof can, boolean>> = {
     warehouse: {
       cost: false,
       recon: false,
       po: false,
+      sku: false,
       move: true,
       postStocktake: false,
     },
@@ -22,6 +23,7 @@ describe("RBAC 权限矩阵 can.*（RC-06 / 越权红线）", () => {
       cost: true,
       recon: true,
       po: true,
+      sku: true,
       move: false,
       postStocktake: false,
     },
@@ -29,6 +31,7 @@ describe("RBAC 权限矩阵 can.*（RC-06 / 越权红线）", () => {
       cost: true,
       recon: true,
       po: true,
+      sku: true,
       move: true,
       postStocktake: true,
     },

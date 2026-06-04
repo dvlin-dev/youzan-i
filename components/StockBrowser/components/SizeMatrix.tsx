@@ -1,13 +1,16 @@
 import { COLOR_HEX } from "@/lib/constants";
 
 import type { StyleGroup } from "../types";
+import { SafetyStockEditor } from "./SafetyStockEditor";
 
 /** 颜色 × 尺码 库存矩阵。空格子早返回占位，有 SKU 才渲染可点格子（点击查看流水）。 */
 export function SizeMatrix({
   g,
+  canManage,
   onOpen,
 }: {
   g: StyleGroup;
+  canManage: boolean;
   onOpen: (skuCode: string) => void;
 }) {
   return (
@@ -76,6 +79,12 @@ export function SizeMatrix({
       <div className="dim" style={{ fontSize: 12, marginTop: 10 }}>
         点任意格子查看该 SKU 的<b>不可变流水</b>（可追溯）
       </div>
+      {canManage && (
+        <SafetyStockEditor
+          styleNo={g.styleNo}
+          current={g.items[0]?.safetyStock ?? 0}
+        />
+      )}
     </div>
   );
 }
