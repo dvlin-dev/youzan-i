@@ -66,8 +66,12 @@ export const stockLedger = pgTable(
     bizType: text("biz_type").notNull(),
     docNo: text("doc_no").notNull(),
     ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
-    operatorId: text("operator_id").notNull(),
-    reviewerId: text("reviewer_id"),
+    // 操作人 / 复核人：指向 app_user.id（外键强约束）——每一笔流水都能追溯到真实用户，
+    // 而不再是可乱填、可指向幽灵的自由文本人名。展示时按 id join 取名（见 queries.userNames）。
+    operatorId: text("operator_id")
+      .notNull()
+      .references(() => appUser.id),
+    reviewerId: text("reviewer_id").references(() => appUser.id),
     status: ledgerStatusEnum("status").notNull().default("pending"),
     scanned: boolean("scanned").notNull().default(true),
     qc: boolean("qc"),
@@ -100,7 +104,9 @@ export const moveDraft = pgTable(
       .references(() => sku.skuCode),
     delta: integer("delta").notNull(),
     bizType: text("biz_type").notNull(),
-    operatorId: text("operator_id").notNull(),
+    operatorId: text("operator_id")
+      .notNull()
+      .references(() => appUser.id),
     poRef: text("po_ref"),
     qc: boolean("qc"),
     scanned: boolean("scanned").notNull().default(true),
@@ -118,7 +124,9 @@ export const purchaseOrder = pgTable("purchase_order", {
   poNo: text("po_no").primaryKey(),
   supplier: text("supplier").notNull(),
   status: poStatusEnum("status").notNull().default("草稿"),
-  createdBy: text("created_by").notNull(),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => appUser.id),
   eta: text("eta"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -141,8 +149,12 @@ export const stocktake = pgTable("stocktake", {
   scope: text("scope").notNull(),
   status: stocktakeStatusEnum("status").notNull().default("待复核"),
   snapTs: timestamp("snap_ts", { withTimezone: true }).notNull(),
-  counter: text("counter").notNull(),
-  createdBy: text("created_by").notNull(),
+  counter: text("counter")
+    .notNull()
+    .references(() => appUser.id),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => appUser.id),
   countedAt: timestamp("counted_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -159,6 +171,27 @@ export const stocktakeCount = pgTable("stocktake_count", {
   resolved: boolean("resolved").notNull().default(false),
 });
 
+/**
+ * query_sql 审计表：AI 只读 SQL 的每一次调用都留痕（谁 / 何时 / 原始 SQL / 结果）。
+ * 独立 append-only 日志——不强制外键到 app_user（审计须能在用户删除后依旧留存，故同时存 actorName 冗余）；
+ * 也**不授予只读角色**读取（被审计者不可读自己的审计），仅运维经主连接 / db:studio 查看。
+ */
+export const queryAudit = pgTable(
+  "query_audit",
+  {
+    id: serial("id").primaryKey(),
+    ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+    actorId: text("actor_id").notNull(),
+    actorName: text("actor_name").notNull(),
+    role: text("role").notNull(),
+    sql: text("sql").notNull(),
+    outcome: text("outcome").notNull(),
+    reason: text("reason"),
+    rowCount: integer("row_count"),
+  },
+  (t) => [index("audit_ts_idx").on(t.ts)],
+);
+
 export type Sku = typeof sku.$inferSelect;
 export type StockLedger = typeof stockLedger.$inferSelect;
 export type NewLedger = typeof stockLedger.$inferInsert;
@@ -169,3 +202,5 @@ export type PoLine = typeof poLine.$inferSelect;
 export type Stocktake = typeof stocktake.$inferSelect;
 export type StocktakeCount = typeof stocktakeCount.$inferSelect;
 export type AppUser = typeof appUser.$inferSelect;
+export type QueryAudit = typeof queryAudit.$inferSelect;
+export type NewQueryAudit = typeof queryAudit.$inferInsert;

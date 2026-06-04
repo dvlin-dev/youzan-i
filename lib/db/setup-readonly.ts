@@ -82,6 +82,17 @@ async function main() {
     await sql(`GRANT SELECT ON public.${t} TO ${FULL}`);
   await sql(`REVOKE ALL ON public.app_user FROM ${FULL}`); // 即便误授也收回——口令表 DB 层不可读
 
+  // ---- 脱敏用户视图：仅 id / 姓名 / 角色（无 email / password_hash），两个只读角色都可读 ----
+  // 流水 operator_id 等存的是 user.id，AI 经此 join 取姓名；口令表本体仍 DB 层不可读。
+  await sql(`CREATE OR REPLACE VIEW public.app_user_public AS
+    SELECT id, name, role FROM public.app_user`);
+  await sql(`GRANT SELECT ON public.app_user_public TO ${FULL}`);
+
+  // ---- 审计表 query_audit：被审计者不可读自己的审计——对所有只读角色与 PUBLIC 一律拒 ----
+  // （Neon 默认会把新建表授予 PUBLIC，故显式 REVOKE，否则 query_sql 能读到全员查询记录）。
+  for (const r of [FULL, WH, "PUBLIC"])
+    await sql(`REVOKE ALL ON public.query_audit FROM ${r}`);
+
   // ---- 仓管：脱敏视图（去掉 cost_price）+ search_path 把 sku 指向它 ----
   await sql(`CREATE SCHEMA IF NOT EXISTS ${MASK_SCHEMA}`);
   await sql(`CREATE OR REPLACE VIEW ${MASK_SCHEMA}.sku AS
@@ -90,6 +101,7 @@ async function main() {
   await sql(`GRANT USAGE ON SCHEMA ${MASK_SCHEMA} TO ${WH}`);
   await sql(`GRANT SELECT ON ${MASK_SCHEMA}.sku TO ${WH}`);
   for (const t of WH_TABLES) await sql(`GRANT SELECT ON public.${t} TO ${WH}`);
+  await sql(`GRANT SELECT ON public.app_user_public TO ${WH}`); // 仓管也能 join 取操作人姓名
   // 仓管直读 public.sku（含 cost_price）与采购/盘点表：一律不授予，DB 层拒。
   await sql(`REVOKE ALL ON public.sku FROM ${WH}`);
   await sql(`REVOKE ALL ON public.app_user FROM ${WH}`);

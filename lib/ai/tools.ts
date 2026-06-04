@@ -170,13 +170,14 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
       "只读 SQL：跑一条 SELECT 查任意数据，回答预置工具覆盖不到的长尾问题" +
       "（如『上月卡其色卖了多少』『哪个供应商到货最慢』『某客户本季出库 Top10』）。" +
       "只读不写——只能单条 SELECT/WITH，写/DDL/多语句/注释一律被拒。先试 query_stock/low_stock/recon_summary，它们答不了再用它。\n" +
-      "可用表（金额均为整数分，展示时 /100；operator_id/reviewer_id/counter 存的是人名）：\n" +
+      "可用表（金额均为整数分，展示时 /100；operator_id/reviewer_id/counter/created_by 存的是用户 id，要显示人名 join app_user_public）：\n" +
       "· sku(sku_code, style_no, style_name, category, color, size, cost_price, tag_price, safety_stock, barcode)\n" +
       "· stock_ledger(id, sku_code, delta, biz_type, doc_no, ts, operator_id, reviewer_id, status, scanned, qc, po_ref, pd_adjust) —— 库存 = SUM(delta) WHERE status='posted'\n" +
       "· move_draft(doc_no, sku_code, delta, biz_type, operator_id, po_ref, qc, scanned, created_at) —— 待复核草稿\n" +
       "· purchase_order(po_no, supplier, status, created_by, eta, created_at) / po_line(po_no, sku_code, ordered, received, price)\n" +
       "· stocktake(pd_no, scope, status, snap_ts, counter, created_by, counted_at) / stocktake_count(pd_no, sku_code, book_snapshot, actual, resolved)\n" +
-      "部分表/列按角色限制（如成本价 cost_price、采购单、盘点对仓管不可见）、用户表与统计目录人人不可读，被拒时换个查法即可。",
+      "· app_user_public(id, name, role) —— 脱敏用户视图（仅 id/姓名/角色，无邮箱口令），按 id join 取操作人姓名\n" +
+      "部分表/列按角色限制（如成本价 cost_price、采购单、盘点对仓管不可见）、用户口令表与审计表人人不可读，被拒时换个查法即可。",
     schema: z.object({
       sql: z
         .string()
@@ -201,22 +202,22 @@ export function getToolSpecs(ctx: ToolCtx): ToolSpec[] {
         });
 
       if (!readonlyEnabled(role)) {
-        audit({ sql: raw, outcome: "disabled" });
+        await audit({ sql: raw, outcome: "disabled" });
         return "只读 SQL 暂不可用：系统未配置只读数据库角色（DATABASE_URL_READONLY）。请改用其它工具，或让管理员开启。";
       }
       const guard = guardReadonlySql(raw, role);
       if (!guard.ok) {
-        audit({ sql: raw, outcome: "rejected", reason: guard.reason });
+        await audit({ sql: raw, outcome: "rejected", reason: guard.reason });
         return `已拒绝该 SQL：${guard.reason}`;
       }
       try {
         const { rows, truncated } = await runReadonlyQuery(guard.sql, role);
         const safe = maskOutputColumns(rows, role);
-        audit({ sql: guard.sql, outcome: "ok", rowCount: safe.length });
+        await audit({ sql: guard.sql, outcome: "ok", rowCount: safe.length });
         return formatRows(safe, truncated);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        audit({ sql: guard.sql, outcome: "error", reason: msg });
+        await audit({ sql: guard.sql, outcome: "error", reason: msg });
         const hint = /more than once|duplicate/i.test(msg)
           ? "（多列同名，请用 AS 给列取别名）"
           : "";

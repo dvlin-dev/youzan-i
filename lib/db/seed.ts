@@ -109,8 +109,9 @@ const STYLES = [
   },
 ];
 
-const OP = "仓管小李";
-const OP2 = "仓管阿强";
+// 流水的操作人/复核人存 user.id（外键到 app_user）——不再是自由文本人名。
+const OP = "u_wh"; // 仓管小李 录入
+const OP2 = "u_ad"; // 陈总（老板）复核
 
 export async function seed() {
   // 幂等重灌：按外键顺序清空
@@ -481,7 +482,7 @@ export async function seed() {
       poNo: "PO-20260405-001",
       supplier: "宁波恒源针织",
       status: "已入库",
-      createdBy: "采购王姐",
+      createdBy: "u_by",
       eta: "2026-04-08",
       createdAt: d("2026-04-05T09:00:00+08:00"),
     },
@@ -489,7 +490,7 @@ export async function seed() {
       poNo: "PO-20260515-004",
       supplier: "杭州盛织服饰",
       status: "已入库",
-      createdBy: "采购王姐",
+      createdBy: "u_by",
       eta: "2026-05-18",
       createdAt: d("2026-05-15T09:00:00+08:00"),
     },
@@ -497,7 +498,7 @@ export async function seed() {
       poNo: "PO-20260524-002",
       supplier: "宁波恒源针织",
       status: "已入库",
-      createdBy: "采购王姐",
+      createdBy: "u_by",
       eta: "2026-05-24",
       createdAt: d("2026-05-24T09:00:00+08:00"),
     },
@@ -505,7 +506,7 @@ export async function seed() {
       poNo: "PO-20260528-006",
       supplier: "杭州盛织服饰",
       status: "部分到货",
-      createdBy: "采购王姐",
+      createdBy: "u_by",
       eta: "2026-06-02",
       createdAt: d("2026-05-28T09:00:00+08:00"),
     },
@@ -513,7 +514,7 @@ export async function seed() {
       poNo: "PO-20260601-009",
       supplier: "广州潮牌制衣",
       status: "已下单",
-      createdBy: "采购王姐",
+      createdBy: "u_by",
       eta: "2026-06-06",
       createdAt: d("2026-06-01T09:00:00+08:00"),
     },
@@ -521,7 +522,7 @@ export async function seed() {
       poNo: "PO-20260602-011",
       supplier: "杭州盛织服饰",
       status: "草稿",
-      createdBy: "采购王姐",
+      createdBy: "u_by",
       eta: "2026-06-08",
       createdAt: d("2026-06-02T09:00:00+08:00"),
     },
@@ -584,8 +585,8 @@ export async function seed() {
     scope: "全仓盘点",
     status: "待复核",
     snapTs: d(PD_SNAP_TS),
-    counter: "仓管小李",
-    createdBy: "陈总",
+    counter: "u_wh", // 仓管小李 录入实盘
+    createdBy: "u_ad", // 陈总 发起
     countedAt: d("2026-05-30T17:20:00+08:00"),
   });
   const COUNTS: [string, number, number][] = [

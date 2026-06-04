@@ -2,6 +2,7 @@ import { LockView } from "@/components/LockView";
 import { StartStocktake } from "@/components/StartStocktake";
 import { StocktakeBoard } from "@/components/StocktakeBoard";
 import { can } from "@/lib/constants";
+import { userNames } from "@/lib/db/queries";
 import { currentUser } from "@/lib/session";
 import {
   loadStocktakeCounts,
@@ -24,7 +25,10 @@ export default async function StocktakePage() {
         <StartStocktake />
       </div>
     );
-  const countsData = await loadStocktakeCounts();
+  const [countsData, names] = await Promise.all([
+    loadStocktakeCounts(),
+    userNames(),
+  ]);
   const s = summarize(view.rows);
   const rows = view.rows.map((r) => ({
     skuCode: r.skuCode,
@@ -44,7 +48,7 @@ export default async function StocktakePage() {
       pdNo={view.stocktake.pdNo}
       status={view.stocktake.status}
       scope={view.stocktake.scope}
-      counter={view.stocktake.counter}
+      counter={names[view.stocktake.counter] ?? view.stocktake.counter}
       snapTs={view.stocktake.snapTs.toISOString()}
       countedAt={view.stocktake.countedAt.toISOString()}
       rows={rows}
