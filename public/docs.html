@@ -245,7 +245,7 @@
     <h3 class="sub">把“正确”焊进结构，而不是靠自觉——硬约束</h3>
     <div class="checks">
       <div class="check"><span class="ic">✓</span><div><b>库存不可直接编辑</b>，只能追加流水；无 <span class="mono">UPDATE stock.qty</span> 入口。</div></div>
-      <div class="check"><span class="ic">✓</span><div><b>流水只增不改不删</b>；纠错用红冲，原始错误永久留痕。</div></div>
+      <div class="check"><span class="ic">✓</span><div><b>流水只增不改不删</b>，经手人<b>外键到真实用户</b>；纠错用红冲，原始错误永久留痕、可追溯到谁。</div></div>
       <div class="check"><span class="ic">✓</span><div>改库需<b>审批入账</b>（单人即可）；入账经<b>原子守恒护栏</b>，并发出库也打不穿。</div></div>
       <div class="check"><span class="ic">✓</span><div>待复核草稿存于独立 <span class="mono">move_draft</span>，与不可变流水<b>物理隔离</b>。</div></div>
       <div class="check"><span class="ic">✓</span><div>金额一律<b>整数分</b>，仅展示层 /100。</div></div>
@@ -267,16 +267,16 @@
       <span class="step">盘点对账<span class="sub">AI 两层归因</span></span>
     </div>
     <div class="grid g3">
+      <div class="card"><h4>商品档案 · 建档</h4><p>采购 / 老板按 款 × 色 × 码 批量建 SKU、改安全库存阈值；新款库存从 0 起（建档不造流水）。</p></div>
       <div class="card"><h4>库存矩阵</h4><p>款号 × 颜色 × 尺码三维；点任意格子看该 SKU 的全部流水链。</p></div>
       <div class="card"><h4>出入库 + 审批</h4><p>像 Excel 一样矩阵录入；改库先进“待复核”，审批后才入账。</p></div>
-      <div class="card"><h4>采购单状态机</h4><p>草稿→已下单→部分到货→已入库；到货量由流水派生回写。</p></div>
-      <div class="card"><h4>盘点对账</h4><p>账面快照 vs 实盘，AI 把差异拆成可执行的几摞。</p></div>
+      <div class="card"><h4>采购单状态机</h4><p>新建采购单 → 下单 → 登记到货；草稿→已下单→部分到货→已入库，到货量由流水派生回写。</p></div>
+      <div class="card"><h4>盘点对账</h4><p>发起盘点（账面快照取当前库存）→ 录实盘 → AI 把差异拆成可执行的几摞。</p></div>
       <div class="card"><h4>AI 助手</h4><p>一句话查库存 / 连续出入库 / 对账，全程经类型化工具。</p></div>
-      <div class="card"><h4>数据层权限</h4><p>三角色 RBAC，成本价对仓管字段级脱敏。</p></div>
     </div>
     <div class="chips">
       <span class="chip"><span class="dot" style="color:var(--info)"></span>仓管 · 只看库存 + 录出入库（成本脱敏）</span>
-      <span class="chip"><span class="dot" style="color:var(--warn)"></span>采购 · 采购单 + 对账</span>
+      <span class="chip"><span class="dot" style="color:var(--warn)"></span>采购 · 商品档案 + 采购单 + 对账</span>
       <span class="chip"><span class="dot" style="color:var(--primary)"></span>老板 · 全局 + 盘点过账</span>
     </div>
   </div>
@@ -303,7 +303,7 @@
       <div class="bk"><div class="top"><span class="name">在途未录</span><span class="tag tone-teal">假差异</span></div><div class="do">快照后才入账的到货 → 纳入盘点即归零。</div></div>
       <div class="bk"><div class="top"><span class="name">实物损耗</span><span class="tag tone-danger">真损失</span></div><div class="do">检测器全不命中 → 诚实兜底，建议核查货位。</div></div>
     </div>
-    <div class="note"><b>归因质量 = 留痕质量</b>。每笔流水带 经手人 / 时间 / 单号 / 扫码 / 质检 / 采购关联——治错账的留痕，恰好喂养了 AI；查不到就老实说“无解释 + 建议核查”，<b>绝不编原因</b>。</div>
+    <div class="note"><b>归因质量 = 留痕质量</b>。每笔流水带 经手人（外键到真实用户，可追溯到“谁”）/ 时间 / 单号 / 扫码 / 质检 / 采购关联——治错账的留痕，恰好喂养了 AI；查不到就老实说“无解释 + 建议核查”，<b>绝不编原因</b>。</div>
   </div>
 </section>
 
@@ -339,7 +339,7 @@
       </tbody>
     </table>
     <p class="intro" style="font-size:14px">这些是 <span class="mono">lib/ai/tools.ts</span> 暴露给 AI 的<b>白名单工具</b>：Zod 入参（→ JSON schema 喂给模型）+ 服务端 <span class="mono">execute</span>（守恒 / 权限 / 审计在内部）。它们按角色挂载、是类型化工具层 <span class="mono">lib/actions.ts</span> 的子集，写操作只生成待复核单。盘点第 2 层归因解释 <span class="mono">explainDiff</span> 由差异抽屉按需触发，不在对话工具集内。</p>
-    <p class="note"><b>只读 SQL 工具（query_sql）</b>：给 AI 一个“读任意数据”的兜底能力——它能跑一条 <span class="mono">SELECT</span> 回答预置工具覆盖不到的长尾问题，但<b>只读不写</b>，靠纵深防御三层：① 语句层只允许单条 SELECT（拒 INSERT/UPDATE/DELETE/DDL/多语句/注释/危险函数）；② 连接层用<b>独立只读角色</b>（仅 GRANT SELECT），即使解析被绕过 DB 也物理拒写——仓管连接的 <span class="mono">sku</span> 还是去掉 cost_price 的视图，连 <span class="mono">to_jsonb(sku)</span> 也带不出成本价；③ 字段脱敏焊在 DB 层 + 语句超时 + LIMIT + 全程审计。既保住灵活性，又把“只读 + 不泄露受限数据”焊在数据层（设计见 <span class="mono">design/ai-native-architecture</span>）。</p>
+    <p class="note"><b>只读 SQL 工具（query_sql）</b>：给 AI 一个“读任意数据”的兜底能力——它能跑一条 <span class="mono">SELECT</span> 回答预置工具覆盖不到的长尾问题，但<b>只读不写</b>，靠纵深防御三层：① 语句层只允许单条 SELECT（拒 INSERT/UPDATE/DELETE/DDL/多语句/注释/危险函数）；② 连接层用<b>独立只读角色</b>（仅 GRANT SELECT），即使解析被绕过 DB 也物理拒写——仓管连接的 <span class="mono">sku</span> 还是去掉 cost_price 的视图，连 <span class="mono">to_jsonb(sku)</span> 也带不出成本价；③ 字段脱敏焊在 DB 层 + 语句超时 + LIMIT + <b>每次调用落审计表</b> <span class="mono">query_audit</span>（被审计者读不到自己的审计）。要显示经手人姓名时经脱敏视图 <span class="mono">app_user_public</span>（只有 id / 名 / 角色，无邮箱口令）join，口令表本体只读角色 DB 层拒读。既保住灵活性，又把“只读 + 不泄露受限数据”焊在数据层（设计见 <span class="mono">design/ai-native-architecture</span>）。</p>
   </div>
 </section>
 
@@ -373,7 +373,7 @@
 
     <h3 class="sub">数据模型 & 工程化</h3>
     <div class="grid g3">
-      <div class="card"><h4>核心表</h4><p><span class="mono">stock_ledger</span>（不可变）· <span class="mono">move_draft</span>（待复核）· <span class="mono">sku</span> · <span class="mono">purchase_order</span> · <span class="mono">stocktake</span>。</p></div>
+      <div class="card"><h4>核心表</h4><p><span class="mono">stock_ledger</span>（不可变）· <span class="mono">move_draft</span>（待复核）· <span class="mono">sku</span> · <span class="mono">purchase_order</span> · <span class="mono">stocktake</span> · <span class="mono">query_audit</span>（AI SQL 审计）；经手人字段外键到 <span class="mono">app_user</span>。</p></div>
       <div class="card"><h4>可回归</h4><p>库存守恒（I1/I2）+ 6 类归因检测器常驻 Vitest；typecheck / lint / build 全绿。</p></div>
       <div class="card"><h4>一键部署</h4><p>连 GitHub → Vercel 自动建表 + 灌 seed；无 key 时 AI 优雅降级。</p></div>
     </div>
